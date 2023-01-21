@@ -1,6 +1,6 @@
+use common::WeatherInfo;
 use rand::thread_rng;
 use rand::Rng;
-use common::WeatherInfo;
 
 pub fn get_weather_info() -> String {
     // TODO: Read temperature from relevant endpoint

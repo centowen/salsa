@@ -5,7 +5,10 @@ use log::debug;
 mod pages;
 mod services;
 
+use pages::welcome::WelcomePage;
 use pages::weather::WeatherPage;
+use pages::telescope::TelescopePage;
+use pages::observe::ObservePage;
 use yew::prelude::*;
 use yew::{html, Context};
 use yew_router::prelude::*;
@@ -14,16 +17,31 @@ pub enum Msg {}
 
 pub struct Salsa {}
 
-#[derive(Clone, Debug, Routable, PartialEq)]
+#[derive(Debug, Clone, Routable, PartialEq)]
 pub enum Route {
     #[at("/")]
     Home,
+    #[at("/weather")]
+    Weather,
+    #[at("/observe")]
+    Observe,
+    #[at("/telescope/:id")]
+    Telescope {id: String},
 }
 
 fn switch(routes: Route) -> Html {
     match routes {
         Route::Home => html! {
+            <WelcomePage />
+        },
+        Route::Weather => html! {
             <WeatherPage />
+        },
+        Route::Observe => html! {
+            <ObservePage />
+        },
+        Route::Telescope {id} => html! {
+            <TelescopePage id={ id }/>
         },
     }
 }
