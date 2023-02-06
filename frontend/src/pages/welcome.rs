@@ -1,6 +1,6 @@
 use yew::prelude::*;
-use yew_router::prelude::*;
 use yew::{html, Context};
+use yew_router::prelude::*;
 
 use crate::Route;
 

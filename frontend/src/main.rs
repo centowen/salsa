@@ -2,20 +2,21 @@
 
 use log::debug;
 
+mod components;
 mod pages;
 mod services;
 
-use pages::welcome::WelcomePage;
-use pages::weather::WeatherPage;
-use pages::telescope::TelescopePage;
+use common::TelescopeTarget;
 use pages::observe::ObservePage;
+use pages::telescope::TelescopePage;
+use pages::weather::WeatherPage;
+use pages::welcome::WelcomePage;
 use yew::prelude::*;
 use yew::{html, Context};
 use yew_router::prelude::*;
-use common::TelescopeTarget;
 
 pub enum Msg {
-    MoveTelescope(TelescopeTarget)
+    MoveTelescope(TelescopeTarget),
 }
 
 pub struct Salsa {}
@@ -29,7 +30,7 @@ pub enum Route {
     #[at("/observe")]
     Observe,
     #[at("/telescope/:id")]
-    Telescope {id: String},
+    Telescope { id: String },
 }
 
 fn switch(routes: Route) -> Html {
@@ -43,7 +44,7 @@ fn switch(routes: Route) -> Html {
         Route::Observe => html! {
             <ObservePage />
         },
-        Route::Telescope {id} => html! {
+        Route::Telescope { id } => html! {
             <TelescopePage id={ id }/>
         },
     }
