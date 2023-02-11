@@ -1,6 +1,8 @@
 use crate::components::target_selector::TargetSelector;
 use common::TelescopeTarget;
+use gloo_net::http::Request;
 use log::debug;
+use yew::platform::spawn_local;
 use yew::prelude::*;
 
 #[derive(PartialEq, Properties)]
@@ -9,12 +11,12 @@ pub struct Props {
 }
 
 pub struct TelescopePage {
-    target: Option<TelescopeTarget>,
+    target: TelescopeTarget,
 }
 
 #[derive(Debug, Clone, Copy)]
 pub enum Message {
-    ChangeTarget(Option<TelescopeTarget>),
+    ChangeTarget(TelescopeTarget),
 }
 
 impl Component for TelescopePage {
@@ -22,14 +24,33 @@ impl Component for TelescopePage {
     type Properties = Props;
 
     fn create(_ctx: &Context<Self>) -> Self {
-        Self { target: None }
+        Self {
+            target: TelescopeTarget::Parked,
+        }
     }
 
-    fn update(&mut self, _ctx: &Context<Self>, msg: Self::Message) -> bool {
+    fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
             Message::ChangeTarget(target) => {
-                debug!("Updating target to {:?}", &target);
-                self.target = target
+                debug!("Updating target for {} to {:?}", &ctx.props().id, &target);
+                let endpoint = format!("http://localhost:3000/telescope/target/{}", ctx.props().id);
+
+                {
+                    let target = target;
+                    let id = ctx.props().id.clone();
+                    spawn_local(async move {
+                        let response = Request::post(&endpoint)
+                            .json(&target)
+                            .expect("Could not serialize target")
+                            .send()
+                            .await;
+                        if let Err(error_response) = response {
+                            log::error!("Failed to set target for {}: {}", &id, error_response)
+                        }
+                    });
+                }
+
+                self.target = target;
             }
         };
         true
