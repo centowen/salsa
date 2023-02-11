@@ -10,6 +10,7 @@ where
     filters::get_telescope_direction(telescope.clone())
         .or(filters::get_telescope_target(telescope.clone()))
         .or(filters::set_telescope_target(telescope.clone()))
+        .or(filters::get_telescope_info(telescope.clone()))
 }
 
 mod filters {
@@ -55,6 +56,18 @@ mod filters {
             .and(warp::body::json())
             .and(with_telescope_control(telescope))
             .and_then(handlers::set_telescope_target)
+    }
+
+    pub fn get_telescope_info<Telescope>(
+        telescope: Telescope,
+    ) -> impl Filter<Extract = (impl Reply,), Error = Rejection> + Clone
+    where
+        Telescope: TelescopeControl + Clone,
+    {
+        warp::path!("telescope" / String)
+            .and(warp::get())
+            .and(with_telescope_control(telescope))
+            .and_then(handlers::get_telescope_info)
     }
 
     fn with_telescope_control<Telescope>(
@@ -105,5 +118,16 @@ mod handlers {
     {
         telescope.set_target(&id, target).await?;
         Ok(warp::reply::with_status("", StatusCode::OK))
+    }
+
+    pub async fn get_telescope_info<Telescope>(
+        id: String,
+        telescope: Telescope,
+    ) -> Result<impl Reply, Rejection>
+    where
+        Telescope: TelescopeControl,
+    {
+        let info = telescope.get_info(&id).await?;
+        Ok(warp::reply::json(&info))
     }
 }

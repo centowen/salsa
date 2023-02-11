@@ -24,3 +24,15 @@ pub struct Direction {
     pub azimuth: f32,
     pub elevation: f32,
 }
+
+#[derive(Serialize, Deserialize, PartialEq, Debug, Copy, Clone)]
+pub enum TelescopeStatus {
+    Idle,
+    Slewing,
+    Tracking,
+}
+
+#[derive(Serialize, Deserialize, PartialEq, Debug, Copy, Clone)]
+pub struct TelescopeInfo {
+    pub status: TelescopeStatus,
+}
