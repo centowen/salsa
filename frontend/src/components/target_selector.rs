@@ -35,15 +35,12 @@ pub fn format_latitude(l: f32) -> AttrValue {
     AttrValue::from((l * 180.0 / PI).to_string())
 }
 
-fn format_target(target: Option<TelescopeTarget>) -> (Option<AttrValue>, Option<AttrValue>) {
+fn format_target(target: TelescopeTarget) -> (Option<AttrValue>, Option<AttrValue>) {
     match target {
-        Some(target) => match target {
-            TelescopeTarget::Galactic { l, b } => {
-                (Some(format_latitude(l)), Some(format_longitude(b)))
-            }
-            TelescopeTarget::Equatorial { ra: _, dec: _ } => (None, None),
-        },
-        _ => (None, None),
+        TelescopeTarget::Galactic { l, b } => (Some(format_latitude(l)), Some(format_longitude(b))),
+        TelescopeTarget::Equatorial { ra: _, dec: _ } => (None, None),
+        TelescopeTarget::Parked => (None, None),
+        TelescopeTarget::Stopped => (None, None),
     }
 }
 
@@ -119,6 +116,7 @@ pub enum CoordinateSystem {
 struct CoordinateSystemSelectorProps {
     coordinate_system: CoordinateSystem,
     on_change_coordinate_system: Callback<CoordinateSystem>,
+    enabled: bool,
 }
 
 #[function_component]
@@ -145,6 +143,7 @@ fn CoordinateSystemSelector(props: &CoordinateSystemSelectorProps) -> Html {
         <select name="coordinate-system"
                 ref={coordinate_system_select_ref}
                 onchange={on_select_change}
+                disabled={!props.enabled}
         >
             <option value="galactic"
                 selected={props.coordinate_system==CoordinateSystem::Galactic}>
@@ -193,8 +192,8 @@ fn TrackButton(props: &TrackButtonProps) -> Html {
 
 #[derive(PartialEq, Properties)]
 pub struct TargetSelectorProps {
-    pub target: Option<TelescopeTarget>,
-    pub on_target_change: Callback<Option<TelescopeTarget>>,
+    pub target: TelescopeTarget,
+    pub on_target_change: Callback<TelescopeTarget>,
 }
 
 #[derive(Debug, Clone)]
@@ -211,7 +210,7 @@ pub struct TargetSelector {
     x: Option<AttrValue>,
     y: Option<AttrValue>,
     track: bool,
-    target: Option<TelescopeTarget>,
+    target: TelescopeTarget,
 }
 
 fn get_configured_target(selector: &TargetSelector) -> Option<TelescopeTarget> {
@@ -241,7 +240,7 @@ impl Component for TargetSelector {
             x: None,
             y: None,
             track: false,
-            target: None,
+            target: TelescopeTarget::Parked,
         }
     }
 
@@ -252,18 +251,19 @@ impl Component for TargetSelector {
                 self.x = None;
                 self.y = None;
 
-                self.target = None;
+                self.target = TelescopeTarget::Stopped;
                 true
             }
             Message::ChangeXCoordinate(x) => {
                 self.x = x;
 
                 if self.track {
-                    let target = get_configured_target(&self);
-                    if target.is_some() {
+                    if let Some(target) = get_configured_target(&self) {
                         self.target = target;
+                        true
+                    } else {
+                        false
                     }
-                    self.target.is_some()
                 } else {
                     false
                 }
@@ -272,26 +272,28 @@ impl Component for TargetSelector {
                 self.y = y;
 
                 if self.track {
-                    let target = get_configured_target(&self);
-                    if target.is_some() {
+                    if let Some(target) = get_configured_target(&self) {
                         self.target = target;
+                        true
+                    } else {
+                        false
                     }
-                    self.target.is_some()
                 } else {
                     false
                 }
             }
             Message::ChangeTracking(track) => {
                 if track {
-                    let target = get_configured_target(&self);
-                    if target.is_some() {
+                    if let Some(target) = get_configured_target(&self) {
                         self.target = target;
                         self.track = track;
+                        true
+                    } else {
+                        false
                     }
-                    self.target.is_some()
                 } else {
                     self.track = track;
-                    self.target = None;
+                    self.target = TelescopeTarget::Stopped;
                     true
                 }
             }
@@ -299,7 +301,7 @@ impl Component for TargetSelector {
                 self.track = false;
                 self.x = None;
                 self.y = None;
-                self.target = None;
+                self.target = TelescopeTarget::Parked;
                 true
             }
         } {
@@ -355,6 +357,7 @@ impl Component for TargetSelector {
                 <CoordinateSystemSelector
                     coordinate_system={self.coordinate_system}
                     on_change_coordinate_system={coordinate_change}
+                    enabled={!self.track}
                 />
                 <CoordinatePair x={x} y={y}
                     {x_label} {y_label}

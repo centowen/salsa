@@ -15,4 +15,12 @@ pub enum TelescopeTarget {
         l: f32, // in radians
         b: f32, // in radians
     },
+    Parked,
+    Stopped,
+}
+
+#[derive(Serialize, Deserialize, Debug, Copy, Clone)]
+pub struct Direction {
+    pub azimuth: f32,
+    pub elevation: f32,
 }
