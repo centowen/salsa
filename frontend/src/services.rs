@@ -1,7 +1,9 @@
 use std::time::Duration;
 
-use common::WeatherInfo;
+use common::{TelescopeInfo, WeatherInfo};
 use gloo_net::http::Request;
+use serde::de::DeserializeOwned;
+use serde::Deserialize;
 use yew::platform::spawn_local;
 use yew::platform::time::sleep;
 use yew::virtual_dom::AttrValue;
@@ -10,7 +12,6 @@ use yew::Callback;
 const UPDATE_INTERVAL: Duration = Duration::from_secs(10);
 
 pub fn emit_weather_info(weather_cb: Callback<AttrValue>) {
-    // Spawn a background task that will fetch a joke and send it to the component.
     spawn_local(async move {
         loop {
             log::info!("Fetching weather info");
@@ -34,6 +35,36 @@ pub fn emit_weather_info(weather_cb: Callback<AttrValue>) {
             }
 
             sleep(UPDATE_INTERVAL).await;
+        }
+    });
+}
+
+pub fn emit_info(
+    info_callback: Callback<TelescopeInfo>,
+    endpoint: String,
+    update_interval: Duration,
+) {
+    spawn_local(async move {
+        loop {
+            match Request::get(&endpoint).send().await {
+                Ok(response) => match response.json().await {
+                    Ok(telescope_info) => {
+                        info_callback.emit(telescope_info);
+                    }
+                    Err(error) => {
+                        log::error!(
+                            "Failed to deserialize response from {}: {}",
+                            &endpoint,
+                            error
+                        );
+                    }
+                },
+                Err(error) => {
+                    log::error!("Failed to fetch from {}: {}", &endpoint, error);
+                }
+            }
+
+            sleep(update_interval).await;
         }
     });
 }
