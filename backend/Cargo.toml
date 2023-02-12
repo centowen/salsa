@@ -6,12 +6,13 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tokio = { version = "1.24.2", features = ["macros", "rt-multi-thread"] }
-warp = { version = "0.3.3" }
+astro = "2.0.0"
+async-trait = "0.1.62"
+common = { version = "0.1.0", path = "../common" }
+env_logger = "0.10.0"
+log = "0.4.17"
+rand = "0.8.5"
 serde = {version = "1.0.145", features = ["derive"] }
 serde_json = "1.0.85"
-common = { version = "0.1.0", path = "../common" }
-rand = "0.8.5"
-async-trait = "0.1.62"
-log = "0.4.17"
-env_logger = "0.10.0"
+tokio = { version = "1.24.2", features = ["macros", "rt-multi-thread"] }
+warp = { version = "0.3.3" }

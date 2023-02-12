@@ -83,6 +83,21 @@ impl Component for TelescopePage {
             },
             None => "Loading",
         };
+
+        let commanded_horizontal = self.info.map_or("Loading".to_string(), |info| {
+            format!(
+                "{:.1}°, {:.1}°",
+                info.commanded_horizontal.azimuth.to_degrees(),
+                info.commanded_horizontal.altitude.to_degrees()
+            )
+        });
+        let current_horizontal = self.info.map_or("Loading".to_string(), |info| {
+            format!(
+                "{:.1}°, {:.1}°",
+                info.current_horizontal.azimuth.to_degrees(),
+                info.current_horizontal.altitude.to_degrees()
+            )
+        });
         html! {
             <div class="telescope">
                 <div class="telescope-name">
@@ -92,6 +107,12 @@ impl Component for TelescopePage {
                     {format!("Status: {}", telescope_status)}
                 </div>
                 <TargetSelector target={self.target} on_target_change={change_target} />
+                <div class="current-horizontal">
+                    {format!("Commanded horizontal: {}", commanded_horizontal) }
+                </div>
+                <div class="commanded-horizontal">
+                    {format!("Current horizontal: {}", current_horizontal) }
+                </div>
                 <div class="telescope-receiver">
                     { "Telescope receiver" }
                 </div>

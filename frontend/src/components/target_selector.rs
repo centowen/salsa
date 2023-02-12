@@ -1,12 +1,12 @@
 use common::TelescopeTarget;
 use log::debug;
-use std::f32::consts::PI;
+use std::f64::consts::PI;
 use web_sys::HtmlInputElement;
 use web_sys::HtmlSelectElement;
 use yew::prelude::*;
 
-pub fn parse_longitude(l: &str) -> Option<f32> {
-    if let Ok(l) = l.parse::<f32>() {
+pub fn parse_longitude(l: &str) -> Option<f64> {
+    if let Ok(l) = l.parse::<f64>() {
         let l_radian = l * PI / 180.0;
         if l_radian >= -PI && l_radian <= PI {
             return Some(l_radian);
@@ -16,12 +16,12 @@ pub fn parse_longitude(l: &str) -> Option<f32> {
     None
 }
 
-pub fn format_longitude(l: f32) -> AttrValue {
+pub fn format_longitude(l: f64) -> AttrValue {
     AttrValue::from((l * 180.0 / PI).to_string())
 }
 
-pub fn parse_latitude(b: &str) -> Option<f32> {
-    if let Ok(b) = b.parse::<f32>() {
+pub fn parse_latitude(b: &str) -> Option<f64> {
+    if let Ok(b) = b.parse::<f64>() {
         let b_radian = b * PI / 180.0;
         if b_radian >= -PI / 2.0 && b_radian <= PI / 2.0 {
             return Some(b_radian);
@@ -31,17 +31,17 @@ pub fn parse_latitude(b: &str) -> Option<f32> {
     None
 }
 
-pub fn format_latitude(l: f32) -> AttrValue {
+pub fn format_latitude(l: f64) -> AttrValue {
     AttrValue::from((l * 180.0 / PI).to_string())
 }
 
-pub fn parse_right_ascension(ra: &str) -> Option<f32> {
+pub fn parse_right_ascension(ra: &str) -> Option<f64> {
     let e = regex::Regex::new(r"(\d{1,2})[h ]+(\d{2})[m'′ ]+(\d{2}\.?\d{0,6})[″s]?").unwrap();
     if let Some(captures) = e.captures(ra) {
         if let (Ok(deg), Ok(min), Ok(sec)) = (
-            captures[1].parse::<f32>(),
-            captures[2].parse::<f32>(),
-            captures[3].parse::<f32>(),
+            captures[1].parse::<f64>(),
+            captures[2].parse::<f64>(),
+            captures[3].parse::<f64>(),
         ) {
             let sign = deg.signum();
             let deg = sign * deg;
@@ -53,7 +53,7 @@ pub fn parse_right_ascension(ra: &str) -> Option<f32> {
     }
 }
 
-pub fn format_right_ascension(ra: f32) -> AttrValue {
+pub fn format_right_ascension(ra: f64) -> AttrValue {
     let hours = ra * 12.0 / PI;
     let minutes = (hours - hours.floor()) * 60.0;
     let seconds = (minutes - minutes.floor()) * 60.0;
@@ -65,13 +65,13 @@ pub fn format_right_ascension(ra: f32) -> AttrValue {
     ))
 }
 
-pub fn parse_declination(dec: &str) -> Option<f32> {
+pub fn parse_declination(dec: &str) -> Option<f64> {
     let e = regex::Regex::new(r"([\+-]?\d{1,4})[d° ]+(\d{2})[m'′ ]+(\d{2}″?\.?\d{0,5})″?").unwrap();
     if let Some(captures) = e.captures(dec) {
         if let (Ok(deg), Ok(min), Ok(sec)) = (
-            captures[1].parse::<f32>(),
-            captures[2].parse::<f32>(),
-            captures[3].replace("″", "").parse::<f32>(),
+            captures[1].parse::<f64>(),
+            captures[2].parse::<f64>(),
+            captures[3].replace("″", "").parse::<f64>(),
         ) {
             let sign = deg.signum();
             let deg = sign * deg;
@@ -82,7 +82,7 @@ pub fn parse_declination(dec: &str) -> Option<f32> {
     None
 }
 
-pub fn format_declination(dec: f32) -> AttrValue {
+pub fn format_declination(dec: f64) -> AttrValue {
     let degrees = dec * 180.0 / PI;
     let minutes = (degrees - degrees.floor()) * 60.0;
     let seconds = (minutes - minutes.floor()) * 60.0;
@@ -446,12 +446,12 @@ mod test {
     use super::*;
     use approx::assert_relative_eq;
 
-    const DEG: f32 = PI / 180.0f32;
-    const ARCMINUTE: f32 = DEG / 60.0;
-    const ARCSECOND: f32 = ARCMINUTE / 60.0;
-    const HOUR: f32 = PI / 12f32;
-    const MINUTE: f32 = HOUR / 60.0;
-    const SECOND: f32 = MINUTE / 60.0;
+    const DEG: f64 = PI / 180.0f64;
+    const ARCMINUTE: f64 = DEG / 60.0;
+    const ARCSECOND: f64 = ARCMINUTE / 60.0;
+    const HOUR: f64 = PI / 12f64;
+    const MINUTE: f64 = HOUR / 60.0;
+    const SECOND: f64 = MINUTE / 60.0;
 
     #[test]
     fn test_parse_declination() {

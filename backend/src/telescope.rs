@@ -1,6 +1,6 @@
 use async_trait::async_trait;
-use common::{Direction, TelescopeInfo, TelescopeStatus, TelescopeTarget};
-use std::f32::consts::PI;
+use common::{Direction, Location, TelescopeInfo, TelescopeStatus, TelescopeTarget};
+use std::f64::consts::PI;
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -8,20 +8,27 @@ use tokio::sync::Mutex;
 
 pub struct FakeTelescope {
     pub target: TelescopeTarget,
-    pub direction: Direction,
+    pub horizontal: Direction,
     pub last_update: Instant,
+    pub location: Location,
 }
+
+const PARKING_HORIZONTAL: Direction = Direction {
+    azimuth: 0.0,
+    altitude: PI / 2.0,
+};
 
 type FakeTelescopeControl = Arc<Mutex<FakeTelescope>>;
 
 pub fn create_telescope_control() -> FakeTelescopeControl {
     Arc::new(Mutex::new(FakeTelescope {
         target: TelescopeTarget::Parked,
-        direction: Direction {
-            azimuth: 0.0,
-            elevation: PI / 2.0,
-        },
+        horizontal: PARKING_HORIZONTAL,
         last_update: Instant::now(),
+        location: Location {
+            longitude: astro::angle::deg_frm_dms(-11, 55, 4.0).to_radians(),
+            latitude: astro::angle::deg_frm_dms(57, 23, 35.0).to_radians(),
+        },
     }))
 }
 
@@ -51,7 +58,7 @@ pub trait TelescopeControl: Send + Sync {
 impl TelescopeControl for FakeTelescopeControl {
     async fn get_direction(&self, _id: &str) -> Result<Direction, TelescopeError> {
         let telescope = self.lock().await;
-        Ok(telescope.direction)
+        Ok(telescope.horizontal)
     }
 
     async fn get_target(&self, _id: &str) -> Result<TelescopeTarget, TelescopeError> {
@@ -68,6 +75,22 @@ impl TelescopeControl for FakeTelescopeControl {
     }
 
     async fn get_info(&self, _id: &str) -> Result<TelescopeInfo, TelescopeError> {
+        let (location, target, current_horizontal) = {
+            let telescope = self.lock().await;
+            (telescope.location, telescope.target, telescope.horizontal)
+        };
+
+        let commanded_horizontal = match target {
+            TelescopeTarget::Equatorial { ra, dec } => {
+                common::coords::get_horizontal_eq(location, ra, dec)
+            }
+            TelescopeTarget::Galactic { l, b } => {
+                common::coords::get_horizontal_gal(location, l, b)
+            }
+            TelescopeTarget::Stopped => current_horizontal,
+            TelescopeTarget::Parked => PARKING_HORIZONTAL,
+        };
+
         let status = {
             let telescope = self.lock().await;
             match telescope.target {
@@ -81,6 +104,10 @@ impl TelescopeControl for FakeTelescopeControl {
                 }
             }
         };
-        Ok(TelescopeInfo { status })
+        Ok(TelescopeInfo {
+            status,
+            current_horizontal,
+            commanded_horizontal,
+        })
     }
 }
