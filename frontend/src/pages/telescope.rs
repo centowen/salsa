@@ -144,7 +144,7 @@ impl Component for TelescopePage {
 
     fn view(&self, ctx: &Context<Self>) -> Html {
         let change_target = ctx.link().callback(Message::ChangeTarget);
-        let telescope_status = match self.info {
+        let telescope_status = match &self.info {
             Some(info) => match info.status {
                 TelescopeStatus::Idle => "Idle",
                 TelescopeStatus::Slewing => "Slewing",
@@ -170,7 +170,15 @@ impl Component for TelescopePage {
 
         let (track, target) = (self.tracking_configured, self.configured_target);
 
-        let error_text = if let Some(error) = self.most_recent_error {
+        let error_text = if let Some(Some(error)) = self.info.map(|info| info.most_recent_error) {
+            format!(
+                " ({})",
+                match error {
+                    TelescopeError::TargetBelowHorizon =>
+                        "Stopped tracking selected target, it set below the horizon.",
+                }
+            )
+        } else if let Some(error) = self.most_recent_error {
             format!(
                 " ({})",
                 match error {

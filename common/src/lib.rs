@@ -41,20 +41,20 @@ pub struct TelescopeInfo {
     pub commanded_horizontal: Direction,
     pub current_horizontal: Direction,
     pub current_target: TelescopeTarget,
+    pub most_recent_error: Option<TelescopeError>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, PartialEq, Debug, Copy, Clone)]
 pub enum TelescopeError {
-    TargetBelowHorizon { telescope_id: String },
+    TargetBelowHorizon,
 }
 
 impl Display for TelescopeError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let error_message = match self {
-            TelescopeError::TargetBelowHorizon { telescope_id: id } => format!(
-                "Failed to set target for telescope {}, target is below horizon.",
-                id
-            ),
+            TelescopeError::TargetBelowHorizon {} => {
+                "Failed to set target, target is below horizon."
+            }
         };
         f.write_str(&error_message)
     }
