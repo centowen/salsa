@@ -1,111 +1,10 @@
+use crate::coords::{
+    format_target, parse_declination, parse_latitude, parse_longitude, parse_right_ascension,
+};
 use common::TelescopeTarget;
-use log::debug;
-use std::f64::consts::PI;
 use web_sys::HtmlInputElement;
 use web_sys::HtmlSelectElement;
 use yew::prelude::*;
-
-pub fn parse_longitude(l: &str) -> Option<f64> {
-    if let Ok(l) = l.parse::<f64>() {
-        let l_radian = l * PI / 180.0;
-        if l_radian >= -PI && l_radian <= PI {
-            return Some(l_radian);
-        }
-    }
-
-    None
-}
-
-pub fn format_longitude(l: f64) -> AttrValue {
-    AttrValue::from((l * 180.0 / PI).to_string())
-}
-
-pub fn parse_latitude(b: &str) -> Option<f64> {
-    if let Ok(b) = b.parse::<f64>() {
-        let b_radian = b * PI / 180.0;
-        if b_radian >= -PI / 2.0 && b_radian <= PI / 2.0 {
-            return Some(b_radian);
-        }
-    }
-
-    None
-}
-
-pub fn format_latitude(l: f64) -> AttrValue {
-    AttrValue::from((l * 180.0 / PI).to_string())
-}
-
-pub fn parse_right_ascension(ra: &str) -> Option<f64> {
-    let e = regex::Regex::new(r"(\d{1,2})[h ]+(\d{2})[m'′ ]+(\d{2}\.?\d{0,6})[″s]?").unwrap();
-    if let Some(captures) = e.captures(ra) {
-        if let (Ok(deg), Ok(min), Ok(sec)) = (
-            captures[1].parse::<f64>(),
-            captures[2].parse::<f64>(),
-            captures[3].parse::<f64>(),
-        ) {
-            let sign = deg.signum();
-            let deg = sign * deg;
-            return Some(sign * (deg + min / 60. + sec / 3600.) / 12.0 * PI);
-        }
-        Some(0.0)
-    } else {
-        None
-    }
-}
-
-pub fn format_right_ascension(ra: f64) -> AttrValue {
-    let hours = ra * 12.0 / PI;
-    let minutes = (hours - hours.floor()) * 60.0;
-    let seconds = (minutes - minutes.floor()) * 60.0;
-    AttrValue::from(format!(
-        "{:.0}h{:.0}m{:.0}",
-        hours.floor(),
-        minutes.floor(),
-        seconds.floor()
-    ))
-}
-
-pub fn parse_declination(dec: &str) -> Option<f64> {
-    let e = regex::Regex::new(r"([\+-]?\d{1,4})[d° ]+(\d{2})[m'′ ]+(\d{2}″?\.?\d{0,5})″?").unwrap();
-    if let Some(captures) = e.captures(dec) {
-        if let (Ok(deg), Ok(min), Ok(sec)) = (
-            captures[1].parse::<f64>(),
-            captures[2].parse::<f64>(),
-            captures[3].replace("″", "").parse::<f64>(),
-        ) {
-            let sign = deg.signum();
-            let deg = sign * deg;
-            return Some(sign * (deg + min / 60. + sec / 3600.) / 180.0 * PI);
-        }
-    }
-
-    None
-}
-
-pub fn format_declination(dec: f64) -> AttrValue {
-    let degrees = dec * 180.0 / PI;
-    let minutes = (degrees - degrees.floor()) * 60.0;
-    let seconds = (minutes - minutes.floor()) * 60.0;
-    AttrValue::from(format!(
-        "{}{:.0}d{:.0}m{:.0}",
-        if degrees.is_sign_positive() { "+" } else { "" },
-        degrees.floor(),
-        minutes.floor(),
-        seconds.floor()
-    ))
-}
-
-fn format_target(target: TelescopeTarget) -> (Option<AttrValue>, Option<AttrValue>) {
-    match target {
-        TelescopeTarget::Galactic { l, b } => (Some(format_latitude(l)), Some(format_longitude(b))),
-        TelescopeTarget::Equatorial { ra, dec } => (
-            Some(format_right_ascension(ra)),
-            Some(format_declination(dec)),
-        ),
-        TelescopeTarget::Parked => (None, None),
-        TelescopeTarget::Stopped => (None, None),
-    }
-}
 
 #[derive(PartialEq, Properties)]
 struct CoordinatePairProps {
@@ -115,6 +14,7 @@ struct CoordinatePairProps {
     y_label: AttrValue,
     on_x_change: Callback<Option<String>>,
     on_y_change: Callback<Option<String>>,
+    enabled: bool,
 }
 
 #[function_component]
@@ -161,10 +61,12 @@ fn CoordinatePair(props: &CoordinatePairProps) -> Html {
         <>
             <label for="x">{props.x_label.clone()}</label>
             <input type="text" id="x" name="x" value={x}
-                ref={x_input_ref} onchange={on_x_change.clone()} />
+                ref={x_input_ref} onchange={on_x_change.clone()} disabled={!props.enabled}
+            />
             <label for="y">{props.y_label.clone()}</label>
             <input type="text" id="y" name="y" value={y}
-                ref={y_input_ref} onchange={on_y_change.clone()} />
+                ref={y_input_ref} onchange={on_y_change.clone()} disabled={!props.enabled}
+            />
         </>
     }
 }
@@ -240,7 +142,6 @@ fn TrackButton(props: &TrackButtonProps) -> Html {
                 .cast::<HtmlInputElement>()
                 .expect("Reference for x coordinate not attached to input node");
             let track: bool = track_toggle_input.checked();
-            debug!("Emit change tracking status to {}", track);
             on_track_status_change.emit(track);
         })
     };
@@ -256,15 +157,22 @@ fn TrackButton(props: &TrackButtonProps) -> Html {
 #[derive(PartialEq, Properties)]
 pub struct TargetSelectorProps {
     pub target: TelescopeTarget,
-    pub on_target_change: Callback<TelescopeTarget>,
+    pub track: bool,
+    pub on_target_change: Callback<(TelescopeTarget, bool)>,
 }
 
 #[derive(Debug, Clone)]
 pub enum Message {
-    ChangeCoordinateSystem(CoordinateSystem),
-    ChangeXCoordinate(Option<AttrValue>),
-    ChangeYCoordinate(Option<AttrValue>),
-    ChangeTracking(bool),
+    ChangeCoordinateSystem {
+        coordinate_system: CoordinateSystem,
+    },
+    ChangeConfiguration {
+        track: bool,
+        x: Option<AttrValue>,
+        y: Option<AttrValue>,
+        coordinate_system: CoordinateSystem,
+        target: TelescopeTarget,
+    },
     Park,
 }
 
@@ -308,62 +216,37 @@ impl Component for TargetSelector {
             coordinate_system: CoordinateSystem::Galactic,
             x: None,
             y: None,
-            track: false,
             target: TelescopeTarget::Parked,
+            track: false,
         }
     }
 
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
-        if match msg {
-            Message::ChangeCoordinateSystem(coordinate_system) => {
+        match msg {
+            Message::ChangeCoordinateSystem { coordinate_system } => {
                 self.coordinate_system = coordinate_system;
                 self.x = None;
                 self.y = None;
 
                 self.target = TelescopeTarget::Stopped;
-                true
             }
-            Message::ChangeXCoordinate(x) => {
+            Message::ChangeConfiguration {
+                track,
+                x,
+                y,
+                coordinate_system,
+                target,
+            } => {
+                self.track = track;
                 self.x = x;
-
-                if self.track {
-                    if let Some(target) = get_configured_target(&self) {
-                        self.target = target;
-                        true
-                    } else {
-                        false
-                    }
-                } else {
-                    false
-                }
-            }
-            Message::ChangeYCoordinate(y) => {
                 self.y = y;
+                self.coordinate_system = coordinate_system;
+                self.target = target;
 
                 if self.track {
                     if let Some(target) = get_configured_target(&self) {
                         self.target = target;
-                        true
-                    } else {
-                        false
                     }
-                } else {
-                    false
-                }
-            }
-            Message::ChangeTracking(track) => {
-                if track {
-                    if let Some(target) = get_configured_target(&self) {
-                        self.target = target;
-                        self.track = track;
-                        true
-                    } else {
-                        false
-                    }
-                } else {
-                    self.track = track;
-                    self.target = TelescopeTarget::Stopped;
-                    true
                 }
             }
             Message::Park => {
@@ -371,44 +254,90 @@ impl Component for TargetSelector {
                 self.x = None;
                 self.y = None;
                 self.target = TelescopeTarget::Parked;
-                true
             }
-        } {
-            ctx.props().on_target_change.emit(self.target);
         }
+
+        ctx.props().on_target_change.emit((self.target, self.track));
 
         true
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
-        let (x, y) = if self.target == ctx.props().target {
-            (self.x.clone(), self.y.clone())
-        } else {
-            format_target(ctx.props().target)
-        };
+        if ctx.props().target != self.target || ctx.props().track != self.track {
+            let (x, y, coordinate_system) = format_target(ctx.props().target);
+
+            ctx.link().send_message(Message::ChangeConfiguration {
+                track: ctx.props().track,
+                x,
+                y,
+                coordinate_system: coordinate_system.unwrap_or(self.coordinate_system),
+                target: ctx.props().target,
+            });
+        }
 
         let (x_label, y_label) = match self.coordinate_system {
             CoordinateSystem::Galactic => ("Longitude [deg]", "Latitude [deg]"),
             CoordinateSystem::Equatorial => ("Right ascension", "Declination"),
         };
 
-        let create_change_callback = |cb: Callback<Option<AttrValue>>| {
-            Callback::from(move |x: Option<String>| {
-                cb.emit(x.map(|x| AttrValue::from(x)));
-            })
+        let on_x_change = {
+            let track = self.track;
+            let y = self.y.clone();
+            let coordinate_system = self.coordinate_system;
+            let target = self.target;
+            ctx.link()
+                .callback(move |x: Option<String>| Message::ChangeConfiguration {
+                    track,
+                    x: x.map(|x| AttrValue::from(x)),
+                    y: y.clone(),
+                    coordinate_system,
+                    target,
+                })
+        };
+        let on_y_change = {
+            let track = self.track;
+            let x = self.x.clone();
+            let coordinate_system = self.coordinate_system;
+            let target = self.target;
+            ctx.link()
+                .callback(move |y: Option<String>| Message::ChangeConfiguration {
+                    track,
+                    x: x.clone(),
+                    y: y.map(|y| AttrValue::from(y)),
+                    coordinate_system,
+                    target,
+                })
         };
 
         let coordinate_change = {
-            let change_coordinate_system = ctx.link().callback(Message::ChangeCoordinateSystem);
+            let change_coordinate_system =
+                ctx.link()
+                    .callback(|coordinate_system| Message::ChangeCoordinateSystem {
+                        coordinate_system,
+                    });
             Callback::from(move |coordinate_system| {
                 change_coordinate_system.emit(coordinate_system);
             })
         };
 
         let change_tracking_status = {
-            let change_tracking = ctx.link().callback(Message::ChangeTracking);
-            Callback::from(move |track| {
-                change_tracking.emit(track);
+            let x = self.x.clone();
+            let y = self.y.clone();
+            let coordinate_system = self.coordinate_system;
+            let target = self.target;
+            ctx.link().callback(move |track| {
+                let target = match track {
+                    true => target,
+                    false => TelescopeTarget::Stopped,
+                };
+
+                Message::ChangeConfiguration {
+                    track,
+                    x: x.clone(),
+                    y: y.clone(),
+                    coordinate_system,
+                    target,
+                }
             })
         };
 
@@ -428,97 +357,16 @@ impl Component for TargetSelector {
                     on_change_coordinate_system={coordinate_change}
                     enabled={!self.track}
                 />
-                <CoordinatePair x={x} y={y}
+                <CoordinatePair x={self.x.clone()} y={self.y.clone()}
                     {x_label} {y_label}
-                    on_x_change={create_change_callback(ctx.link().callback(Message::ChangeXCoordinate))}
-                    on_y_change={create_change_callback(ctx.link().callback(Message::ChangeYCoordinate))}
+                    {on_x_change}
+                    {on_y_change}
+                    enabled={!self.track}
                 />
                 <TrackButton track={self.track} on_track_status_change={change_tracking_status}
                              enabled={configured_target_valid}/>
                 <button onclick={park_telescope}>{"Park"}</button>
             </>
         }
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-    use approx::assert_relative_eq;
-
-    const DEG: f64 = PI / 180.0f64;
-    const ARCMINUTE: f64 = DEG / 60.0;
-    const ARCSECOND: f64 = ARCMINUTE / 60.0;
-    const HOUR: f64 = PI / 12f64;
-    const MINUTE: f64 = HOUR / 60.0;
-    const SECOND: f64 = MINUTE / 60.0;
-
-    #[test]
-    fn test_parse_declination() {
-        assert_eq!(None, parse_declination("Not a coordinate"));
-        assert_eq!(Some(0.0), parse_declination("+0d00m00.000"));
-        assert_eq!(Some(0.0), parse_declination("-0d00m00.000"));
-
-        assert_relative_eq!(-DEG, parse_declination("-1d00m00.000").unwrap());
-        assert_relative_eq!(-63.0 * DEG, parse_declination("-63d00m00.000").unwrap());
-        assert_relative_eq!(
-            -(63.0 * DEG + 30.0 * ARCMINUTE),
-            parse_declination("-63d30m00.000").unwrap()
-        );
-        assert_relative_eq!(
-            -(64.0 * DEG + 30.0 * ARCMINUTE + 23.0 * ARCSECOND),
-            parse_declination("-64d30m23.000").unwrap()
-        );
-        assert_relative_eq!(
-            64.0 * DEG + 30.0 * ARCMINUTE + 23.0 * ARCSECOND,
-            parse_declination("64d30m23.000").unwrap()
-        );
-        assert_relative_eq!(
-            64.0 * DEG + 30.0 * ARCMINUTE + 23.0 * ARCSECOND,
-            parse_declination("+64d30m23.000").unwrap()
-        );
-        assert_relative_eq!(
-            23.0 * DEG + 30.0 * ARCMINUTE + 11.0 * ARCSECOND,
-            parse_declination("+23° 30′ 11″").unwrap()
-        );
-
-        assert_relative_eq!(
-            -(23.0 * DEG + 30.0 * ARCMINUTE + 11.2 * ARCSECOND),
-            parse_declination("-23 30 11.2").unwrap()
-        );
-    }
-
-    #[test]
-    fn test_parse_right_ascension() {
-        assert_eq!(None, parse_right_ascension("Not a coordinate"));
-        assert_eq!(Some(0.0), parse_right_ascension("0h00m00.000"));
-
-        assert_relative_eq!(HOUR, parse_right_ascension("1h00m00.000").unwrap());
-        assert_relative_eq!(15.0 * HOUR, parse_right_ascension("15 00 00.000").unwrap());
-        assert_relative_eq!(15.5 * HOUR, parse_right_ascension("15h30m00.000s").unwrap());
-        assert_relative_eq!(
-            15.0 * HOUR + 30.0 * MINUTE + 23.0 * SECOND,
-            parse_right_ascension("15h30m23.000s").unwrap()
-        );
-        assert_relative_eq!(
-            15.0 * HOUR + 34.0 * MINUTE + 57.1 * SECOND,
-            parse_right_ascension("15h 34m 57.1s").unwrap()
-        );
-    }
-
-    #[test]
-    fn test_format_right_ascension() {
-        assert_eq!(
-            "15h30m23",
-            format_right_ascension(15.0 * HOUR + 30.0 * MINUTE + 23.0 * SECOND).as_str()
-        );
-    }
-
-    #[test]
-    fn test_format_declination() {
-        assert_eq!(
-            "+15d30m23",
-            format_declination(15.0 * DEG + 30.0 * ARCMINUTE + 23.0 * ARCSECOND).as_str()
-        );
     }
 }
