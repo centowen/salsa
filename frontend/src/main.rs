@@ -3,6 +3,7 @@
 use log::debug;
 
 mod components;
+mod coords;
 mod pages;
 mod services;
 

@@ -15,11 +15,8 @@ where
 
 mod filters {
     use super::handlers;
-    use crate::telescope::{TelescopeControl, TelescopeError};
-    use warp::reject::Reject;
+    use crate::telescope::TelescopeControl;
     use warp::{Filter, Rejection, Reply};
-
-    impl Reject for TelescopeError {}
 
     pub fn get_telescope_direction<Telescope>(
         telescope_control: Telescope,
@@ -83,7 +80,6 @@ mod filters {
 mod handlers {
     use crate::telescope::TelescopeControl;
     use common::TelescopeTarget;
-    use warp::http::StatusCode;
     use warp::{Rejection, Reply};
 
     pub async fn get_telescope_direction<Telescope>(
@@ -93,7 +89,7 @@ mod handlers {
     where
         Telescope: TelescopeControl,
     {
-        let direction = telescope.get_direction(&id).await?;
+        let direction = telescope.get_direction(&id).await;
         Ok(warp::reply::json(&direction))
     }
 
@@ -104,7 +100,7 @@ mod handlers {
     where
         Telescope: TelescopeControl,
     {
-        let target = telescope.get_target(&id).await?;
+        let target = telescope.get_target(&id).await;
         Ok(warp::reply::json(&target))
     }
 
@@ -116,8 +112,8 @@ mod handlers {
     where
         Telescope: TelescopeControl,
     {
-        telescope.set_target(&id, target).await?;
-        Ok(warp::reply::with_status("", StatusCode::OK))
+        let result = telescope.set_target(&id, target).await;
+        Ok(warp::reply::json(&result))
     }
 
     pub async fn get_telescope_info<Telescope>(
@@ -127,7 +123,7 @@ mod handlers {
     where
         Telescope: TelescopeControl,
     {
-        let info = telescope.get_info(&id).await?;
+        let info = telescope.get_info(&id).await;
         Ok(warp::reply::json(&info))
     }
 }
