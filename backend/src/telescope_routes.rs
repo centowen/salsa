@@ -24,7 +24,7 @@ mod filters {
     where
         Telescope: TelescopeControl + Clone,
     {
-        warp::path!("telescope" / "direction" / String)
+        warp::path!("api" / "telescope" / String / "direction")
             .and(warp::get())
             .and(with_telescope_control::<Telescope>(telescope_control))
             .and_then(handlers::get_telescope_direction)
@@ -36,7 +36,7 @@ mod filters {
     where
         Telescope: TelescopeControl + Clone,
     {
-        warp::path!("telescope" / "target" / String)
+        warp::path!("api" / "telescope" / String / "target")
             .and(warp::get())
             .and(with_telescope_control(telescope))
             .and_then(handlers::get_telescope_target)
@@ -48,7 +48,7 @@ mod filters {
     where
         Telescope: TelescopeControl + Clone,
     {
-        warp::path!("telescope" / "target" / String)
+        warp::path!("api" / "telescope" / String / "target")
             .and(warp::post())
             .and(warp::body::json())
             .and(with_telescope_control(telescope))
@@ -61,7 +61,7 @@ mod filters {
     where
         Telescope: TelescopeControl + Clone,
     {
-        warp::path!("telescope" / String)
+        warp::path!("api" / "telescope" / String)
             .and(warp::get())
             .and(with_telescope_control(telescope))
             .and_then(handlers::get_telescope_info)
