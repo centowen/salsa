@@ -13,7 +13,7 @@ pub fn emit_weather_info(weather_cb: Callback<AttrValue>) {
     spawn_local(async move {
         loop {
             log::info!("Fetching weather info");
-            let response = Request::get("http://localhost:3000/weather").send().await;
+            let response = Request::get("/api/weather").send().await;
             if response.is_ok() {
                 let response = response.ok().unwrap();
                 let weather_info: Result<WeatherInfo, _> = response.json().await;

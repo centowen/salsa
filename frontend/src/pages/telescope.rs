@@ -47,7 +47,7 @@ impl Component for TelescopePage {
 
     fn create(ctx: &Context<Self>) -> Self {
         let info_cb = ctx.link().callback(Message::UpdateInfo);
-        let endpoint = format!("http://localhost:3000/telescope/{}", &ctx.props().id);
+        let endpoint = format!("/api/telescope/{}", &ctx.props().id);
         emit_info(info_cb, endpoint, Duration::from_millis(200));
         Self {
             configured_target: TelescopeTarget::Parked,
@@ -69,7 +69,7 @@ impl Component for TelescopePage {
                 self.tracking_configured = track;
                 self.waiting_for_command = true;
 
-                let endpoint = format!("http://localhost:3000/telescope/target/{}", ctx.props().id);
+                let endpoint = format!("/api/telescope/{}/target", ctx.props().id);
 
                 {
                     let target = target;
