@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
+use std::time::Duration;
 
 pub mod coords;
 
@@ -35,19 +36,31 @@ pub enum TelescopeStatus {
     Tracking,
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Debug, Copy, Clone)]
+#[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
+pub struct ObservedSpectra {
+    pub frequencies: Vec<f32>,
+    pub spectra: Vec<f32>,
+    pub observation_time: Duration,
+}
+
+#[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
 pub struct TelescopeInfo {
     pub status: TelescopeStatus,
     pub commanded_horizontal: Direction,
     pub current_horizontal: Direction,
     pub current_target: TelescopeTarget,
     pub most_recent_error: Option<TelescopeError>,
+    pub measurement_in_progress: bool,
+    pub latest_observation: Option<ObservedSpectra>,
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Debug, Copy, Clone)]
 pub enum TelescopeError {
     TargetBelowHorizon,
 }
+
+#[derive(Serialize, Deserialize, PartialEq, Debug, Copy, Clone)]
+pub enum ReceiverError {}
 
 impl Display for TelescopeError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -64,4 +77,9 @@ impl Display for TelescopeError {
 pub struct Location {
     pub longitude: f64,
     pub latitude: f64,
+}
+
+#[derive(Serialize, Deserialize, PartialEq, Debug, Copy, Clone)]
+pub struct ReceiverConfiguration {
+    pub integrate: bool,
 }
