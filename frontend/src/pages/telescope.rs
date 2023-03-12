@@ -1,6 +1,10 @@
+use crate::components::graph::Graph;
 use crate::components::target_selector::TargetSelector;
 use crate::services::emit_info;
-use common::{TelescopeError, TelescopeInfo, TelescopeStatus, TelescopeTarget};
+use common::{
+    ReceiverConfiguration, ReceiverError, TelescopeError, TelescopeInfo, TelescopeStatus,
+    TelescopeTarget,
+};
 use gloo_net::http::Request;
 use std::time::Duration;
 use yew::platform::spawn_local;
@@ -25,6 +29,17 @@ impl From<TelescopeError> for TelescopePageError {
     }
 }
 
+#[derive(Debug, Copy, Clone)]
+pub enum TelescopePageReceiverError {
+    RequestError,
+}
+
+impl From<ReceiverError> for TelescopePageReceiverError {
+    fn from(value: ReceiverError) -> Self {
+        match value {}
+    }
+}
+
 #[derive(Debug)]
 pub struct TelescopePage {
     configured_target: TelescopeTarget,
@@ -34,11 +49,15 @@ pub struct TelescopePage {
     waiting_for_command: bool,
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub enum Message {
     ChangeTarget((TelescopeTarget, bool)),
     ReceiveChangeTargetResult(Result<TelescopeTarget, TelescopePageError>),
     UpdateInfo(TelescopeInfo),
+    SetReceiverConfiguration(bool),
+    ReceiveSetReceiverConfigurationResult(
+        Result<ReceiverConfiguration, TelescopePageReceiverError>,
+    ),
 }
 
 impl Component for TelescopePage {
@@ -119,8 +138,9 @@ impl Component for TelescopePage {
                     }
                 }
 
-                if self.info != Some(telescope_info) {
-                    self.info = Some(telescope_info);
+                let telescope_info = Some(telescope_info);
+                if &self.info != &telescope_info {
+                    self.info = telescope_info;
                     updated = true;
                 }
 
@@ -139,6 +159,53 @@ impl Component for TelescopePage {
                 self.waiting_for_command = false;
                 true
             }
+            Message::SetReceiverConfiguration(integrate) => {
+                let endpoint = format!("/api/telescope/{}/receiver", ctx.props().id);
+                let id = ctx.props().id.clone();
+                let receiver_configuration = ReceiverConfiguration { integrate };
+                let result_callback = ctx
+                    .link()
+                    .callback(Message::ReceiveSetReceiverConfigurationResult);
+                spawn_local(async move {
+                    let result = match Request::post(&endpoint)
+                        .json(&receiver_configuration)
+                        .expect("Could not serialize received configuration")
+                        .send()
+                        .await
+                    {
+                        Ok(response) => match response
+                            .json::<Result<ReceiverConfiguration, ReceiverError>>()
+                            .await
+                            .expect("Could not deserialize set_receiver_configuration result")
+                        {
+                            Ok(configuration) => Ok(configuration),
+                            Err(error) => Err(error.into()),
+                        },
+                        Err(error_response) => {
+                            log::error!("Failed to set target for {}: {}", &id, error_response);
+                            Err(TelescopePageReceiverError::RequestError)
+                        }
+                    };
+
+                    result_callback.emit(result);
+                });
+                true
+            }
+            Message::ReceiveSetReceiverConfigurationResult(result) => {
+                match result {
+                    Ok(result) => {
+                        if result.integrate {
+                            log::info!("Started integration for receiver")
+                        } else {
+                            log::info!("Stopped integration for receiver")
+                        }
+                    }
+                    Err(error) => {
+                        log::error!("Failed to change receiver configuration: {:?}", error)
+                    }
+                }
+                true
+            }
         }
     }
 
@@ -153,14 +220,14 @@ impl Component for TelescopePage {
             None => "Loading",
         };
 
-        let commanded_horizontal = self.info.map_or("Loading".to_string(), |info| {
+        let commanded_horizontal = self.info.as_ref().map_or("Loading".to_string(), |info| {
             format!(
                 "{:.1}°, {:.1}°",
                 info.commanded_horizontal.azimuth.to_degrees(),
                 info.commanded_horizontal.altitude.to_degrees()
             )
         });
-        let current_horizontal = self.info.map_or("Loading".to_string(), |info| {
+        let current_horizontal = self.info.as_ref().map_or("Loading".to_string(), |info| {
             format!(
                 "{:.1}°, {:.1}°",
                 info.current_horizontal.azimuth.to_degrees(),
@@ -170,25 +237,40 @@ impl Component for TelescopePage {
 
         let (track, target) = (self.tracking_configured, self.configured_target);
 
-        let error_text = if let Some(Some(error)) = self.info.map(|info| info.most_recent_error) {
-            format!(
-                " ({})",
-                match error {
-                    TelescopeError::TargetBelowHorizon =>
-                        "Stopped tracking selected target, it set below the horizon.",
-                }
-            )
-        } else if let Some(error) = self.most_recent_error {
-            format!(
-                " ({})",
-                match error {
-                    TelescopePageError::RequestError => "Failed to send request",
-                    TelescopePageError::TargetBelowHorizon =>
-                        "Could not track selected target, it is currently below the horizon.",
-                }
-            )
-        } else {
-            "".to_string()
+        let error_text =
+            if let Some(Some(error)) = self.info.as_ref().map(|info| info.most_recent_error) {
+                format!(
+                    " ({})",
+                    match error {
+                        TelescopeError::TargetBelowHorizon =>
+                            "Stopped tracking selected target, it set below the horizon.",
+                    }
+                )
+            } else if let Some(error) = self.most_recent_error {
+                format!(
+                    " ({})",
+                    match error {
+                        TelescopePageError::RequestError => "Failed to send request",
+                        TelescopePageError::TargetBelowHorizon =>
+                            "Could not track selected target, it is currently below the horizon.",
+                    }
+                )
+            } else {
+                "".to_string()
+            };
+
+        let start_integrate = {
+            let link = ctx.link().clone();
+            Callback::from(move |_| {
+                link.send_message(Self::Message::SetReceiverConfiguration(true));
+            })
+        };
+
+        let stop_integrate = {
+            let link = ctx.link().clone();
+            Callback::from(move |_| {
+                link.send_message(Self::Message::SetReceiverConfiguration(false));
+            })
         };
 
         html! {
@@ -207,7 +289,32 @@ impl Component for TelescopePage {
                     {format!("Current horizontal: {}", current_horizontal) }
                 </div>
                 <div class="telescope-receiver">
-                    { "Telescope receiver" }
+                    if let Some(info) = self.info.as_ref() {
+                        <button
+                            disabled={info.measurement_in_progress
+                                   || info.status != TelescopeStatus::Tracking}
+                            onclick={start_integrate}
+                        >
+                            {"Integrate"}
+                        </button>
+                        <button
+                            disabled={!info.measurement_in_progress}
+                            onclick={stop_integrate}
+                        >
+                            {"Stop"}
+                        </button>
+                        if let Some(observation) = info.latest_observation.as_ref() {
+                            <div>{format!("Integration time: {}s",
+                                          observation.observation_time.as_secs())}</div>
+                            <div>
+                                <Graph id="spectra"
+                                       x={observation.frequencies.clone()}
+                                       y={observation.spectra.clone()} />
+                            </div>
+                        }
+                    } else {
+                        <div>{"Loading"}</div>
+                    }
                 </div>
             </div>
         }
