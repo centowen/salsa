@@ -1,0 +1,16 @@
+a {
+    color: black;
+}
+
+.telescope-receiver {
+    border: 1px solid black;
+    margin: 4px;
+    width: 1000px;
+    height: 500px;
+}
+
+.telescope-target-control {
+    border: 1px solid black;
+    margin: 4px;
+    width: 1000px;
+}
