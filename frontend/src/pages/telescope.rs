@@ -278,15 +278,17 @@ impl Component for TelescopePage {
                 <div class="telescope-name">
                     <h1>{ ctx.props().id.clone() }</h1>
                 </div>
-                <div class="telescope-status">
-                    {format!("Status: {}{}", telescope_status, error_text)}
-                </div>
-                <TargetSelector target={target} track={track} on_target_change={change_target} />
-                <div class="current-horizontal">
-                    {format!("Commanded horizontal: {}", commanded_horizontal) }
-                </div>
-                <div class="commanded-horizontal">
-                    {format!("Current horizontal: {}", current_horizontal) }
+                <div class="telescope-target-control">
+                    <div class="telescope-status">
+                        {format!("Status: {}{}", telescope_status, error_text)}
+                    </div>
+                    <TargetSelector target={target} track={track} on_target_change={change_target} />
+                    <div class="current-horizontal">
+                        {format!("Commanded horizontal: {}", commanded_horizontal) }
+                    </div>
+                    <div class="commanded-horizontal">
+                        {format!("Current horizontal: {}", current_horizontal) }
+                    </div>
                 </div>
                 <div class="telescope-receiver">
                     if let Some(info) = self.info.as_ref() {
