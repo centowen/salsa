@@ -25,6 +25,7 @@ impl From<TelescopeError> for TelescopePageError {
     fn from(value: TelescopeError) -> Self {
         match value {
             TelescopeError::TargetBelowHorizon { .. } => TelescopePageError::TargetBelowHorizon,
+            TelescopeError::TelescopeIOError(_) => todo!(),
         }
     }
 }
@@ -237,27 +238,31 @@ impl Component for TelescopePage {
 
         let (track, target) = (self.tracking_configured, self.configured_target);
 
-        let error_text =
-            if let Some(Some(error)) = self.info.as_ref().map(|info| info.most_recent_error) {
-                format!(
-                    " ({})",
-                    match error {
-                        TelescopeError::TargetBelowHorizon =>
-                            "Stopped tracking selected target, it set below the horizon.",
-                    }
-                )
-            } else if let Some(error) = self.most_recent_error {
-                format!(
-                    " ({})",
-                    match error {
-                        TelescopePageError::RequestError => "Failed to send request",
-                        TelescopePageError::TargetBelowHorizon =>
-                            "Could not track selected target, it is currently below the horizon.",
-                    }
-                )
-            } else {
-                "".to_string()
-            };
+        let error_text = if let Some(Some(error)) = self
+            .info
+            .as_ref()
+            .map(|info| info.most_recent_error.clone())
+        {
+            format!(
+                " ({})",
+                match error {
+                    TelescopeError::TargetBelowHorizon =>
+                        "Stopped tracking selected target, it set below the horizon.",
+                    TelescopeError::TelescopeIOError(_) => todo!(),
+                }
+            )
+        } else if let Some(error) = self.most_recent_error {
+            format!(
+                " ({})",
+                match error {
+                    TelescopePageError::RequestError => "Failed to send request",
+                    TelescopePageError::TargetBelowHorizon =>
+                        "Could not track selected target, it is currently below the horizon.",
+                }
+            )
+        } else {
+            "".to_string()
+        };
 
         let start_integrate = {
             let link = ctx.link().clone();

@@ -54,9 +54,10 @@ pub struct TelescopeInfo {
     pub latest_observation: Option<ObservedSpectra>,
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Debug, Copy, Clone)]
+#[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
 pub enum TelescopeError {
     TargetBelowHorizon,
+    TelescopeIOError(String),
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Debug, Copy, Clone)]
@@ -64,12 +65,21 @@ pub enum ReceiverError {}
 
 impl Display for TelescopeError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let error_message = match self {
+        match self {
             TelescopeError::TargetBelowHorizon {} => {
-                "Failed to set target, target is below horizon."
+                f.write_str("Failed to set target, target is below horizon.")
             }
-        };
-        f.write_str(&error_message)
+            TelescopeError::TelescopeIOError(message) => f.write_str(&format!(
+                "Error in communication with telescope: {}",
+                message
+            )),
+        }
+    }
+}
+
+impl From<std::io::Error> for TelescopeError {
+    fn from(error: std::io::Error) -> Self {
+        TelescopeError::TelescopeIOError(format!("Communication with telescope failed: {}", error))
     }
 }
 
