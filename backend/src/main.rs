@@ -1,11 +1,15 @@
-use crate::telescope::{create_telescope, TelescopeControl, TELESCOPE_UPDATE_INTERVAL};
+use crate::telescope::{create_telescope_collection, TELESCOPE_UPDATE_INTERVAL};
 use clap::Parser;
 use std::net::Ipv4Addr;
+use std::sync::Arc;
+use tokio::sync::Mutex;
 use warp::http::header;
 use warp::http::Method;
 use warp::Filter;
 
+mod fake_telescope;
 mod frontend_routes;
+mod salsa_telescope;
 mod telescope;
 mod telescope_routes;
 mod weather;
@@ -20,6 +24,9 @@ struct Args {
     /// Ip to listen to
     #[arg(short, long, default_value = "127.0.0.1")]
     ip: String,
+
+    #[arg(short, long)]
+    telescope_address: Option<String>,
 }
 
 #[tokio::main]
@@ -28,25 +35,48 @@ async fn main() {
 
     let args = Args::parse();
 
-    let telescope = create_telescope();
+    let telescopes = create_telescope_collection();
+    {
+        let mut telescopes = telescopes.write().await;
+        telescopes.insert(
+            "fake".to_string(),
+            Arc::new(Mutex::new(fake_telescope::create("fake".to_string()))),
+        );
+        telescopes.insert(
+            "brage".to_string(),
+            Arc::new(Mutex::new(salsa_telescope::create(
+                "brage".to_string(),
+                "192.168.5.12:23".to_string(),
+            ))),
+        );
+    }
+    // let telescope = fake_telescope::create();
 
-    let telescope_service = tokio::spawn({
-        let telescope = telescope.clone();
-        async move {
-            loop {
-                if let Err(error) = telescope.update(TELESCOPE_UPDATE_INTERVAL).await {
-                    log::error!("Failed to update telescope: {}", error);
+    let telescope_services = {
+        let telescopes: Vec<_> = {
+            let telescopes = telescopes.read().await;
+            telescopes.values().cloned().collect()
+        };
+        telescopes.into_iter().map(|telescope| {
+            tokio::spawn(async move {
+                loop {
+                    {
+                        let mut telescope = telescope.clone().lock_owned().await;
+                        if let Err(error) = telescope.update(TELESCOPE_UPDATE_INTERVAL).await {
+                            log::error!("Failed to update telescope: {}", error);
+                        }
+                    }
+                    tokio::time::sleep(TELESCOPE_UPDATE_INTERVAL).await;
                 }
-                tokio::time::sleep(TELESCOPE_UPDATE_INTERVAL).await;
-            }
-        }
-    });
+            })
+        })
+    };
 
     let weather_routes = warp::path!("api" / "weather").map(weather::get_weather_info);
 
     let routes = frontend_routes::routes(args.frontend_path.clone())
         .or(weather_routes)
-        .or(telescope_routes::routes(telescope))
+        .or(telescope_routes::routes(telescopes))
         .with(
             warp::cors()
                 .allow_credentials(true)
@@ -67,7 +97,9 @@ async fn main() {
     };
 
     warp::serve(routes).run((ip, 3000)).await;
-    telescope_service
-        .await
-        .expect("Could not join telescope service at end of program");
+    for telescope_service in telescope_services {
+        telescope_service
+            .await
+            .expect("Could not join telescope service at end of program");
+    }
 }
