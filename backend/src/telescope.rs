@@ -23,6 +23,7 @@ pub trait Telescope: Send + Sync {
     ) -> Result<ReceiverConfiguration, ReceiverError>;
     async fn get_info(&self) -> Result<TelescopeInfo, TelescopeError>;
     async fn update(&mut self, delta_time: Duration) -> Result<(), TelescopeError>;
+    async fn restart(&mut self) -> Result<(), TelescopeError>;
 }
 
 pub type TelescopeContainer = Arc<Mutex<dyn Telescope>>;

@@ -43,34 +43,38 @@ async fn main() {
             Arc::new(Mutex::new(fake_telescope::create("fake".to_string()))),
         );
         telescopes.insert(
-            "brage".to_string(),
+            "torre".to_string(),
             Arc::new(Mutex::new(salsa_telescope::create(
-                "brage".to_string(),
                 "192.168.5.12:23".to_string(),
             ))),
         );
     }
-    // let telescope = fake_telescope::create();
 
     let telescope_services = {
         let telescopes: Vec<_> = {
             let telescopes = telescopes.read().await;
             telescopes.values().cloned().collect()
         };
-        telescopes.into_iter().map(|telescope| {
-            tokio::spawn(async move {
-                loop {
-                    {
-                        let mut telescope = telescope.clone().lock_owned().await;
-                        if let Err(error) = telescope.update(TELESCOPE_UPDATE_INTERVAL).await {
-                            log::error!("Failed to update telescope: {}", error);
+        log::info!("Starting {} telescope services", telescopes.len());
+        telescopes
+            .into_iter()
+            .map(|telescope| {
+                log::info!("Starting telescope service for telescope");
+                tokio::spawn(async move {
+                    loop {
+                        {
+                            let mut telescope = telescope.clone().lock_owned().await;
+                            if let Err(error) = telescope.update(TELESCOPE_UPDATE_INTERVAL).await {
+                                log::error!("Failed to update telescope: {}", error);
+                            }
                         }
+                        tokio::time::sleep(TELESCOPE_UPDATE_INTERVAL).await;
                     }
-                    tokio::time::sleep(TELESCOPE_UPDATE_INTERVAL).await;
-                }
+                })
             })
-        })
+            .collect::<Vec<_>>()
     };
+    log::info!("Started {} telescope services", telescope_services.len());
 
     let weather_routes = warp::path!("api" / "weather").map(weather::get_weather_info);
 

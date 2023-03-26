@@ -8,6 +8,7 @@ pub fn routes(
         .or(filters::get_telescope_target(telescopes.clone()))
         .or(filters::set_telescope_target(telescopes.clone()))
         .or(filters::get_telescope_info(telescopes.clone()))
+        .or(filters::restart_telescope(telescopes.clone()))
         .or(filters::set_receiver_configuration(telescopes.clone()))
 }
 
@@ -61,6 +62,15 @@ mod filters {
             .and(warp::get())
             .and(with_telescopes(telescopes))
             .and_then(handlers::get_telescope_info)
+    }
+
+    pub fn restart_telescope(
+        telescopes: TelescopeCollection,
+    ) -> impl Filter<Extract = (impl Reply,), Error = Rejection> + Clone {
+        warp::path!("api" / "telescope" / String / "restart")
+            .and(warp::get())
+            .and(with_telescopes(telescopes))
+            .and_then(handlers::restart_telescope)
     }
 
     fn with_telescopes(
@@ -137,6 +147,15 @@ mod handlers {
     ) -> Result<impl Reply, Rejection> {
         let telescope = get_telescope(telescopes, &id).await?;
         let info = telescope.get_info().await;
+        Ok(warp::reply::json(&info))
+    }
+
+    pub async fn restart_telescope(
+        id: String,
+        telescopes: TelescopeCollection,
+    ) -> Result<impl Reply, Rejection> {
+        let mut telescope = get_telescope(telescopes, &id).await?;
+        let info = telescope.restart().await;
         Ok(warp::reply::json(&info))
     }
 }

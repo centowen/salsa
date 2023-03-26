@@ -46,7 +46,7 @@ pub struct ObservedSpectra {
 #[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
 pub struct TelescopeInfo {
     pub status: TelescopeStatus,
-    pub commanded_horizontal: Direction,
+    pub commanded_horizontal: Option<Direction>,
     pub current_horizontal: Direction,
     pub current_target: TelescopeTarget,
     pub most_recent_error: Option<TelescopeError>,
@@ -58,6 +58,7 @@ pub struct TelescopeInfo {
 pub enum TelescopeError {
     TargetBelowHorizon,
     TelescopeIOError(String),
+    TelescopeNotConnected,
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Debug, Copy, Clone)]
@@ -73,6 +74,7 @@ impl Display for TelescopeError {
                 "Error in communication with telescope: {}",
                 message
             )),
+            TelescopeError::TelescopeNotConnected => f.write_str("Telescope is not connected."),
         }
     }
 }
