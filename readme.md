@@ -6,6 +6,10 @@ The simplest method to serve the frontend is using trunk. To install trunk using
 ```
 cargo install --locked trunk
 ```
+To install wasm you probably need to run
+```
+rustup target add wasm32-unknown-unknown
+```
 
 ## Running
 Start both backend and trunk using the suppliend scripts under development. First start the backend
