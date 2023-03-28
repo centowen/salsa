@@ -1,6 +1,6 @@
 use crate::telescope::Telescope;
 use async_trait::async_trait;
-use common::coords::{get_horizontal_eq, get_horizontal_gal};
+use common::coords::{horizontal_from_equatorial, horizontal_from_galactic};
 use common::{
     Direction, Location, ReceiverConfiguration, ReceiverError, TelescopeError, TelescopeInfo,
     TelescopeStatus, TelescopeTarget,
@@ -260,9 +260,9 @@ impl SalsaTelescope {
     fn calculate_target_horizontal(&self) -> Option<Direction> {
         match self.target {
             TelescopeTarget::Equatorial { ra, dec } => {
-                Some(get_horizontal_eq(self.location, ra, dec))
+                Some(horizontal_from_equatorial(self.location, ra, dec))
             }
-            TelescopeTarget::Galactic { l, b } => Some(get_horizontal_gal(self.location, l, b)),
+            TelescopeTarget::Galactic { l, b } => Some(horizontal_from_galactic(self.location, l, b)),
             TelescopeTarget::Stopped => None,
             TelescopeTarget::Parked => None,
         }
