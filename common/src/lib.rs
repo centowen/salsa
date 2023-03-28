@@ -1,3 +1,4 @@
+use chrono::{offset::Utc, DateTime};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 use std::time::Duration;
@@ -92,4 +93,12 @@ pub struct Location {
 #[derive(Serialize, Deserialize, PartialEq, Debug, Copy, Clone)]
 pub struct ReceiverConfiguration {
     pub integrate: bool,
+}
+
+#[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
+pub struct Booking {
+    pub start_time: DateTime<Utc>,
+    pub end_time: DateTime<Utc>,
+    pub telescope_name: String,
+    pub user_name: String,
 }

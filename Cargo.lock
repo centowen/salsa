@@ -82,6 +82,7 @@ version = "0.1.0"
 dependencies = [
  "astro",
  "async-trait",
+ "chrono",
  "clap",
  "common",
  "env_logger",
@@ -187,6 +188,7 @@ dependencies = [
  "js-sys",
  "num-integer",
  "num-traits",
+ "serde",
  "time",
  "wasm-bindgen",
  "winapi",
@@ -598,6 +600,7 @@ dependencies = [
  "anyhow",
  "approx",
  "assert_float_eq",
+ "chrono",
  "common",
  "console_error_panic_hook",
  "gloo-net",

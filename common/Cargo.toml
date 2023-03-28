@@ -7,5 +7,5 @@ edition = "2021"
 
 [dependencies]
 astro = "2.0.0"
-chrono = "0.4.2"
-serde = {version = "=1.0.145", features = ["derive"]}
+chrono = { version = "0.4.2", features = ["serde"] }
+serde = { version = "=1.0.145", features = ["derive"] }
