@@ -41,8 +41,11 @@ pub fn horizontal_from_equatorial(location: Location, ra: f64, dec: f64) -> Dire
     let lha = (gast - ra) * 15.0 * PI / 180.0 + lon;
     let alt = (lha.cos() * dec.cos() * lat.cos() + dec.sin() * lat.sin()).asin();
     let az = (-lha.sin()).atan2(dec.tan() * lat.cos() - lat.sin() * lha.cos());
+    // Convert to degrees
+    let alt = alt * 180.0/PI;
     // Ensure positive az
-    let az = ((az % 2.0 * PI) + 2.0 * PI) % 2.0 * PI;
+    let az = ((az*180.0/PI % 360.0) + 360.0 ) % 360.0;
+    // TODO: return radians?
     Direction{azimuth: az, altitude: alt}
 }
 

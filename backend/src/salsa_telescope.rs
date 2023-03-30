@@ -12,6 +12,7 @@ use std::str::FromStr;
 use std::time::Duration;
 use tokio::time::Instant;
 
+
 #[derive(Copy, Clone, Debug)]
 enum TelescopeCommand {
     Stop,
@@ -62,7 +63,7 @@ pub fn create(telescope_address: String) -> SalsaTelescope {
         commanded_horizontal: None,
         current_direction: None,
         location: Location {
-            longitude: astro::angle::deg_frm_dms(-11, 55, 4.0).to_radians(),
+            longitude: astro::angle::deg_frm_dms(11, 55, 4.0).to_radians(),
             latitude: astro::angle::deg_frm_dms(57, 23, 35.0).to_radians(),
         },
         most_recent_error: None,
@@ -93,7 +94,7 @@ where
         .iter()
         .map(|b| format!("{:02X}", b))
         .collect::<String>();
-    log::info!("Sending command: {:?} ({})", command, command_as_hex);
+    //log::info!("Sending command: {:?} ({})", command, command_as_hex);
     stream.write(&command.to_bytes()).unwrap();
     let mut result = vec![0; 128];
     let response_length = stream.read(&mut result).unwrap();
@@ -102,7 +103,7 @@ where
         .iter()
         .map(|b| format!("{:02X}", b))
         .collect::<String>();
-    log::info!("Response: {}", response_as_hex);
+    //log::info!("Response: {}", response_as_hex);
     Ok(result)
 }
 
@@ -218,7 +219,7 @@ impl Telescope for SalsaTelescope {
             }
         }
 
-        log::info!("Connecting to telescope");
+        //log::info!("Connecting to telescope");
         let stream = create_connection(&self);
         let mut stream = match stream {
             Ok(stream) => stream,
@@ -229,7 +230,7 @@ impl Telescope for SalsaTelescope {
             }
         };
 
-        log::info!("Updating telescope");
+        //log::info!("Updating telescope");
         self.update_direction(&mut stream).await?;
         Ok(())
     }
@@ -262,7 +263,10 @@ impl SalsaTelescope {
             TelescopeTarget::Equatorial { ra, dec } => {
                 Some(horizontal_from_equatorial(self.location, ra, dec))
             }
-            TelescopeTarget::Galactic { l, b } => Some(horizontal_from_galactic(self.location, l, b)),
+            TelescopeTarget::Galactic { l, b } => 
+            {
+                Some(horizontal_from_galactic(self.location, l, b))
+            }
             TelescopeTarget::Stopped => None,
             TelescopeTarget::Parked => None,
         }
