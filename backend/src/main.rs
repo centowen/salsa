@@ -7,6 +7,7 @@ use warp::http::header;
 use warp::http::Method;
 use warp::Filter;
 
+mod booking_routes;
 mod fake_telescope;
 mod frontend_routes;
 mod salsa_telescope;
@@ -80,6 +81,7 @@ async fn main() {
 
     let routes = frontend_routes::routes(args.frontend_path.clone())
         .or(weather_routes)
+        .or(booking_routes::routes())
         .or(telescope_routes::routes(telescopes))
         .with(
             warp::cors()

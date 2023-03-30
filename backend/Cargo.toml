@@ -9,6 +9,7 @@ edition = "2021"
 astro = "2.0.0"
 async-trait = "0.1.62"
 clap = {version = "4.1.6", features = ["derive"] }
+chrono = { version = "0.4.2", features = ["serde"] }
 common = { version = "0.1.0", path = "../common" }
 env_logger = "0.10.0"
 log = "0.4.17"
