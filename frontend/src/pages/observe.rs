@@ -27,7 +27,7 @@ impl Component for ObservePage {
                     <Link<Route> to={Route::Telescope{id: "fake".into()}}>{ "Fake" }</Link<Route>>
                 </div>
                 <div class="list-entry">
-                    <Link<Route> to={Route::Telescope{id: "torre".into()}}>{ "Torre" }</Link<Route>>
+                    <Link<Route> to={Route::Telescope{id: "brage".into()}}>{ "Brage" }</Link<Route>>
                 </div>
             </div>
         }

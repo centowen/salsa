@@ -44,9 +44,10 @@ async fn main() {
             Arc::new(Mutex::new(fake_telescope::create("fake".to_string()))),
         );
         telescopes.insert(
-            "torre".to_string(),
+            "brage".to_string(),
             Arc::new(Mutex::new(salsa_telescope::create(
-                "192.168.5.12:23".to_string(),
+                //"192.168.5.12:23".to_string(), // torre
+                "192.168.5.10:23".to_string(), // brage
             ))),
         );
     }
