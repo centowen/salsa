@@ -216,9 +216,9 @@ fn calculate_target_horizontal(
 ) -> Direction {
     match target {
         TelescopeTarget::Equatorial { ra, dec } => {
-            common::coords::get_horizontal_eq(location, ra, dec)
+            common::coords::horizontal_from_equatorial(location, ra, dec)
         }
-        TelescopeTarget::Galactic { l, b } => common::coords::get_horizontal_gal(location, l, b),
+        TelescopeTarget::Galactic { l, b } => common::coords::horizontal_from_galactic(location, l, b),
         TelescopeTarget::Stopped => current_horizontal,
         TelescopeTarget::Parked => FAKE_TELESCOPE_PARKING_HORIZONTAL,
     }
