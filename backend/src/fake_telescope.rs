@@ -146,7 +146,7 @@ impl Telescope for FakeTelescope {
         Ok(TelescopeInfo {
             status,
             current_horizontal: self.horizontal,
-            commanded_horizontal: target_horizontal,
+            commanded_horizontal: Some(target_horizontal),
             current_target: self.target,
             most_recent_error: self.most_recent_error.clone(),
             measurement_in_progress: self.receiver_configuration.integrate,
@@ -178,6 +178,13 @@ impl Telescope for FakeTelescope {
             self.current_spectra.push(create_fake_spectra(delta_time))
         }
 
+        Ok(())
+    }
+
+    async fn restart(&mut self) -> Result<(), TelescopeError> {
+        self.most_recent_error = None;
+        self.receiver_configuration.integrate = false;
+        self.current_spectra.clear();
         Ok(())
     }
 }

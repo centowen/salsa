@@ -31,5 +31,8 @@ pub fn get_horizontal_eq(location: Location, ra: f64, dec: f64) -> Direction {
         astro::coords::hr_angl_frm_observer_long(mean_sidereal_time, location.longitude, ra);
     let azimuth = astro::coords::az_frm_eq(hour_angle, dec, location.latitude) + PI;
     let altitude = astro::coords::alt_frm_eq(hour_angle, dec, location.latitude);
-    Direction { azimuth, altitude }
+    Direction {
+        azimuth: azimuth.to_degrees(),
+        altitude: altitude.to_degrees(),
+    }
 }
