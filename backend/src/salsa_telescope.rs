@@ -187,10 +187,7 @@ impl Telescope for SalsaTelescope {
 
         let status = match self.commanded_horizontal {
             Some(commanded_direction) => {
-                let horizontal_offset_squared =
-                    (current_horizontal.azimuth - commanded_direction.azimuth).powi(2)
-                        + (current_horizontal.altitude - commanded_direction.altitude).powi(2);
-                if horizontal_offset_squared < 2.0 * 0.2f64.powi(2) {
+                if directions_are_close(commanded_direction, current_horizontal) {
                     TelescopeStatus::Tracking
                 } else {
                     TelescopeStatus::Slewing
@@ -253,7 +250,7 @@ impl Telescope for SalsaTelescope {
 
 fn directions_are_close(a: Direction, b: Direction) -> bool {
     // The salsa telescope works with a precision of 0.1 degrees
-    let epsilon = 0.2;
+    let epsilon = 0.1;
     (a.azimuth - b.azimuth).abs() < epsilon && (a.altitude - b.altitude).abs() < epsilon
 }
 
@@ -311,7 +308,7 @@ impl SalsaTelescope {
                 log::info!("Target horizontal: {:?}", target_horizontal);
                 log::info!("Current horizontal: {:?}", current_horizontal);
                 if directions_are_close(target_horizontal, current_horizontal) {
-                    self.commanded_horizontal = None;
+                    //self.commanded_horizontal = None;
                     return Ok(());
                 }
 
