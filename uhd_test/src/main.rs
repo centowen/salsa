@@ -54,7 +54,7 @@ fn measure_switched(
         &mut spec_ref,
     );
     for i in 0..avg_pts {
-        spec.push(0.5 * (spec_sig[i] - spec_ref[i]));
+        spec[i] = spec[i] + (0.5 * (spec_sig[i] - spec_ref[i]));
     }
 }
 
@@ -147,19 +147,27 @@ pub fn main() -> Result<()> {
     usrp.set_rx_dc_offset_enabled(true, 0)?;
 
     // Switched HI example
-    let tint: f64 = 11.0; // integration time, seconds
+    let tint: f64 = 64.0; // integration time, seconds
     let srate: f64 = 2.5e6; // sample rate, Hz
     let sfreq: f64 = 1.4204e9;
     let rfreq: f64 = 1.4179e9;
     usrp.set_rx_sample_rate(srate as f64, 0)?;
-    let tcyc: usize = 4 ; // time per integration cycle
+    let tcyc: usize = 4; // time per integration cycle
     let ncyc = (tint as usize) / (tcyc);
     let rest = tint % (tcyc as f64);
-    let mut spec: Vec<f64> = vec![];
-    for c in 1..=ncyc {
+    let mut spec = Vec::with_capacity(avg_pts);
+    spec.resize(avg_pts, 0.0);
+    for _c in 1..=ncyc {
         log::info!("Cycle switch measurement...");
         measure_switched(
-            &mut usrp, sfreq, rfreq, fft_pts, tcyc as f64, avg_pts, srate, &mut spec,
+            &mut usrp,
+            sfreq,
+            rfreq,
+            fft_pts,
+            tcyc as f64,
+            avg_pts,
+            srate,
+            &mut spec,
         );
     }
     // Assume tint in integer seconds, so if there is a rest it is > 0.5
@@ -169,7 +177,12 @@ pub fn main() -> Result<()> {
             &mut usrp, sfreq, rfreq, fft_pts, rest, avg_pts, srate, &mut spec,
         );
     }
-    
+
+    // Normalise based on number of cycles
+    for i in 0..avg_pts {
+        spec[i] = spec[i] / (ncyc as f64 + rest / (tcyc as f64));
+    }
+
     // Non switched GNSS example
     //let tint: f64 = 1.0; // integration time, seconds
     //let srate: f64 = 25e6; // sample rate, Hz
