@@ -1,5 +1,6 @@
 use crate::telescope::Telescope;
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use common::coords::{horizontal_from_equatorial, horizontal_from_galactic};
 use common::{
     Direction, Location, ReceiverConfiguration, ReceiverError, TelescopeError, TelescopeInfo,
@@ -10,8 +11,6 @@ use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpStream};
 use std::str::FromStr;
 use std::time::Duration;
-use tokio::time::Instant;
-
 
 #[derive(Copy, Clone, Debug)]
 enum TelescopeCommand {
@@ -21,7 +20,7 @@ enum TelescopeCommand {
     SetDirection(Direction),
 }
 
-pub const LOWEST_ALLOWED_ALTITUDE: f64 = 5.0;
+pub const LOWEST_ALLOWED_ALTITUDE: f64 = 5.0f64 / 180.0f64 * std::f64::consts::PI;
 
 impl TelescopeCommand {
     fn to_bytes(&self) -> Vec<u8> {
@@ -51,8 +50,8 @@ pub struct SalsaTelescope {
     most_recent_error: Option<TelescopeError>,
     connection_established: bool,
     lowest_allowed_altitude: f64,
-    telescope_restart_request_at: Option<tokio::time::Instant>,
-    wait_time_after_restart: Duration,
+    telescope_restart_request_at: Option<DateTime<Utc>>,
+    wait_time_after_restart: chrono::Duration,
 }
 
 pub fn create(telescope_address: String) -> SalsaTelescope {
@@ -64,13 +63,13 @@ pub fn create(telescope_address: String) -> SalsaTelescope {
         current_direction: None,
         location: Location {
             longitude: 0.20802143022, //(11.0+55.0/60.0+7.5/3600.0) * PI / 180.0. Sign positive, handled in gmst calc
-            latitude: 1.00170457462, //(57.0+23.0/60.0+36.4/3600.0) * PI / 180.0
+            latitude: 1.00170457462,  //(57.0+23.0/60.0+36.4/3600.0) * PI / 180.0
         },
         most_recent_error: None,
         connection_established: false,
         lowest_allowed_altitude: LOWEST_ALLOWED_ALTITUDE,
         telescope_restart_request_at: None,
-        wait_time_after_restart: Duration::from_secs(10),
+        wait_time_after_restart: chrono::Duration::seconds(10),
     }
 }
 
@@ -89,21 +88,10 @@ fn send_command<Stream>(
 where
     Stream: Read + Write,
 {
-    let command_as_hex = command
-        .to_bytes()
-        .iter()
-        .map(|b| format!("{:02X}", b))
-        .collect::<String>();
-    //log::info!("Sending command: {:?} ({})", command, command_as_hex);
     stream.write(&command.to_bytes()).unwrap();
     let mut result = vec![0; 128];
     let response_length = stream.read(&mut result).unwrap();
     result.truncate(response_length);
-    let response_as_hex = result
-        .iter()
-        .map(|b| format!("{:02X}", b))
-        .collect::<String>();
-    //log::info!("Response: {}", response_as_hex);
     Ok(result)
 }
 
@@ -117,7 +105,7 @@ fn rot2prog_bytes_to_int(bytes: &[u8]) -> u32 {
 }
 
 fn rot2prog_bytes_to_angle(bytes: &[u8]) -> f64 {
-    rot2prog_bytes_to_int(bytes) as f64 / 100.0 - 360.0
+    (rot2prog_bytes_to_int(bytes) as f64 / 100.0 - 360.0).to_radians()
 }
 
 // Reading the documentation of the telescope, this should be the correct way to interpret the bytes
@@ -133,12 +121,12 @@ fn rot2prog_bytes_to_int_documented(bytes: &[u8]) -> u32 {
 
 #[allow(dead_code)]
 fn rot2prog_bytes_to_angle_documented(bytes: &[u8]) -> f64 {
-    rot2prog_bytes_to_int_documented(bytes) as f64 / 100.0 - 360.0
+    (rot2prog_bytes_to_int_documented(bytes) as f64 / 100.0 - 360.0).to_radians()
 }
 
 fn rot2prog_angle_to_bytes(angle: f64) -> [u8; 5] {
     let mut bytes = [0; 5];
-    let angle = ((angle + 360.0) * 100.0).round();
+    let angle = ((angle.to_degrees() + 360.0) * 100.0).round();
     bytes[0] = (angle / 10000.0) as u8 + 0x30;
     bytes[1] = ((angle % 10000.0) / 1000.0) as u8 + 0x30;
     bytes[2] = ((angle % 1000.0) / 100.0) as u8 + 0x30;
@@ -166,7 +154,7 @@ impl Telescope for SalsaTelescope {
         let mut stream = create_connection(&self)?;
 
         self.target = target;
-        self.update_direction(&mut stream).await?;
+        self.update_direction(Utc::now(), &mut stream).await?;
 
         Ok(target)
     }
@@ -208,8 +196,9 @@ impl Telescope for SalsaTelescope {
     }
 
     async fn update(&mut self, _delta_time: Duration) -> Result<(), TelescopeError> {
+        let now = Utc::now();
         if let Some(telescope_restart_request_at) = self.telescope_restart_request_at {
-            if Instant::now() - telescope_restart_request_at < self.wait_time_after_restart {
+            if now - telescope_restart_request_at < self.wait_time_after_restart {
                 return Ok(());
             } else {
                 self.telescope_restart_request_at = None;
@@ -228,7 +217,7 @@ impl Telescope for SalsaTelescope {
         };
 
         //log::info!("Updating telescope");
-        self.update_direction(&mut stream).await?;
+        self.update_direction(now, &mut stream).await?;
         Ok(())
     }
 
@@ -243,7 +232,7 @@ impl Telescope for SalsaTelescope {
         }
         self.most_recent_error = None;
         self.connection_established = false;
-        self.telescope_restart_request_at = Some(Instant::now());
+        self.telescope_restart_request_at = Some(Utc::now());
         Ok(())
     }
 }
@@ -255,14 +244,13 @@ fn directions_are_close(a: Direction, b: Direction) -> bool {
 }
 
 impl SalsaTelescope {
-    fn calculate_target_horizontal(&self) -> Option<Direction> {
+    fn calculate_target_horizontal(&self, when: DateTime<Utc>) -> Option<Direction> {
         match self.target {
             TelescopeTarget::Equatorial { ra, dec } => {
-                Some(horizontal_from_equatorial(self.location, ra, dec))
+                Some(horizontal_from_equatorial(self.location, when, ra, dec))
             }
-            TelescopeTarget::Galactic { l, b } => 
-            {
-                Some(horizontal_from_galactic(self.location, l, b))
+            TelescopeTarget::Galactic { l, b } => {
+                Some(horizontal_from_galactic(self.location, when, l, b))
             }
             TelescopeTarget::Stopped => None,
             TelescopeTarget::Parked => None,
@@ -283,11 +271,15 @@ impl SalsaTelescope {
         })
     }
 
-    async fn update_direction<Stream>(&mut self, stream: &mut Stream) -> Result<(), TelescopeError>
+    async fn update_direction<Stream>(
+        &mut self,
+        when: DateTime<Utc>,
+        stream: &mut Stream,
+    ) -> Result<(), TelescopeError>
     where
         Stream: Read + Write,
     {
-        let target_horizontal = self.calculate_target_horizontal();
+        let target_horizontal = self.calculate_target_horizontal(when);
         let current_horizontal = self.get_current_horizontal(stream).await?;
         self.current_direction = Some(current_horizontal);
 
@@ -348,8 +340,10 @@ impl SalsaTelescope {
 
 #[cfg(test)]
 mod test {
+    use chrono::TimeZone;
 
     use super::*;
+    use std::f64::consts::PI;
 
     #[test]
     fn test_rot2prog_angle_to_bytes() {
@@ -359,7 +353,7 @@ mod test {
             "0.0 should be 0x3336303030 (telescope expects angle + 360)"
         );
         assert_eq!(
-            rot2prog_angle_to_bytes(5.54),
+            rot2prog_angle_to_bytes(5.54_f64.to_radians()),
             hex!("3336353534"),
             "5.54 should be 0x3336353534 (example from documentation)"
         );
@@ -371,7 +365,11 @@ mod test {
         // directly instead of ascii encoded numbers. E.g. 0x03 instead of 0x33 which is '3' in ascii.
         assert!((rot2prog_bytes_to_angle_documented(&hex!("3336303030")) - 0.0).abs() < 0.01,);
         // Example from documentation
-        assert!((rot2prog_bytes_to_angle_documented(&hex!("3338323333")) - 22.33).abs() < 0.01,);
+        assert!(
+            (rot2prog_bytes_to_angle_documented(&hex!("3338323333")) - 22.33_f64.to_radians())
+                .abs()
+                < 0.01,
+        );
     }
 
     #[test]
@@ -419,23 +417,28 @@ mod test {
             .response
             .push(hex!("58333635353433373030355F20").to_vec());
         stream.response.push(hex!("570000").to_vec());
-        telescope.update_direction(&mut stream).await.unwrap();
+        telescope
+            .update_direction(Utc::now(), &mut stream)
+            .await
+            .unwrap();
         assert_eq!(stream.request.len(), 2);
         assert_eq!(stream.request[1], TelescopeCommand::Stop.to_bytes());
         assert_eq!(telescope.commanded_horizontal, None);
 
-        // TODO: Inject time to ensure that the target is not below horizon
-        // Update direction with target sends command
-
+        // Inject the time to ensure that the target is not below horizon
+        let when = Utc.with_ymd_and_hms(2023, 4, 7, 12, 0, 0).unwrap();
         stream
             .response
             .push(hex!("58333635353433373030355F20").to_vec());
         stream
             .response
-            .push(hex!("58333635353433373030355F20").to_vec());
+            .push(hex!("583336353534333730303520").to_vec());
         stream.request.clear();
-        telescope.target = TelescopeTarget::Galactic { l: 180.0, b: 0.0 };
-        telescope.update_direction(&mut stream).await.unwrap();
+        telescope.target = TelescopeTarget::Galactic {
+            l: PI / 2.0,
+            b: 0.0,
+        };
+        telescope.update_direction(when, &mut stream).await.unwrap();
         assert_eq!(stream.request.len(), 2);
         assert_eq!(stream.request[1].len(), 13);
         assert_eq!(stream.request[1][0], 0x57);
@@ -452,17 +455,23 @@ mod test {
         stream.response.push(hex!("570000").to_vec());
         stream.request.clear();
         telescope.target = TelescopeTarget::Stopped;
-        telescope.update_direction(&mut stream).await.unwrap();
+        telescope
+            .update_direction(Utc::now(), &mut stream)
+            .await
+            .unwrap();
         assert_eq!(stream.request.len(), 2);
         assert_eq!(stream.request[1], TelescopeCommand::Stop.to_bytes());
         assert_eq!(telescope.commanded_horizontal, None);
 
-        // Calling update_direction again does not send any command
+        // Calling update_direction again does not send set direction command
         stream
             .response
             .push(hex!("58333635353433373030355F20").to_vec());
         stream.request.clear();
-        telescope.update_direction(&mut stream).await.unwrap();
+        telescope
+            .update_direction(Utc::now(), &mut stream)
+            .await
+            .unwrap();
         assert_eq!(stream.request.len(), 1);
     }
 }

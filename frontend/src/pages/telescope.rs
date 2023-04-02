@@ -230,7 +230,8 @@ impl Component for TelescopePage {
             if let Some(commanded_horizontal) = info.commanded_horizontal {
                 format!(
                     "{:.1}°, {:.1}°",
-                    commanded_horizontal.azimuth, commanded_horizontal.altitude
+                    commanded_horizontal.azimuth.to_degrees(),
+                    commanded_horizontal.altitude.to_degrees()
                 )
             } else {
                 "".to_string()
@@ -240,7 +241,8 @@ impl Component for TelescopePage {
         let current_horizontal = self.info.as_ref().map_or("Loading".to_string(), |info| {
             format!(
                 "{:.1}°, {:.1}°",
-                info.current_horizontal.azimuth, info.current_horizontal.altitude
+                info.current_horizontal.azimuth.to_degrees(),
+                info.current_horizontal.altitude.to_degrees()
             )
         });
 
