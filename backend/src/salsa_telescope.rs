@@ -63,8 +63,8 @@ pub fn create(telescope_address: String) -> SalsaTelescope {
         commanded_horizontal: None,
         current_direction: None,
         location: Location {
-            longitude: astro::angle::deg_frm_dms(11, 55, 4.0).to_radians(),
-            latitude: astro::angle::deg_frm_dms(57, 23, 35.0).to_radians(),
+            longitude: 0.20802143022, //(11.0+55.0/60.0+7.5/3600.0) * PI / 180.0. Sign positive, handled in gmst calc
+            latitude: 1.00170457462, //(57.0+23.0/60.0+36.4/3600.0) * PI / 180.0
         },
         most_recent_error: None,
         connection_established: false,
