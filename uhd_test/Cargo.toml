@@ -19,3 +19,6 @@ env_logger = "0.8.3"
 rustfft="*"
 plotters = "0.3.4"
 median = "0.3.2"
+
+[profile.dev]
+opt-level = 3 # Better optimisation for efficient FFT even in debug stage
