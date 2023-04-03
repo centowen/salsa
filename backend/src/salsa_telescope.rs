@@ -334,21 +334,18 @@ impl SalsaTelescope {
 
         match target_horizontal {
             Some(target_horizontal) => {
-                log::info!("Target horizontal: {:?}", target_horizontal);
-                log::info!("Current horizontal: {:?}", current_horizontal);
-                if directions_are_close(target_horizontal, current_horizontal) {
-                    //self.commanded_horizontal = None;
-                    return Ok(());
-                }
-
                 if target_horizontal.altitude < self.lowest_allowed_altitude {
                     self.most_recent_error = Some(TelescopeError::TargetBelowHorizon);
                     self.commanded_horizontal = None;
                     return Err(TelescopeError::TargetBelowHorizon);
                 }
 
-                send_command(stream, TelescopeCommand::SetDirection(target_horizontal))?;
                 self.commanded_horizontal = Some(target_horizontal);
+
+                if !directions_are_close(target_horizontal, current_horizontal) {
+                    send_command(stream, TelescopeCommand::SetDirection(target_horizontal))?;
+                }
+
                 Ok(())
             }
             None => {
@@ -613,6 +610,27 @@ mod test {
         assert_eq!(telescope.commanded_horizontal, None);
         assert_eq!(
             TelescopeStatus::Idle,
+            telescope.get_info().await.unwrap().status
+        );
+
+        // Start tracking again
+        stream.commands.clear();
+        telescope.target = TelescopeTarget::Galactic {
+            l: PI / 2.0,
+            b: 0.0,
+        };
+        telescope.update_direction(when, &mut stream).await.unwrap();
+        assert_eq!(
+            TelescopeStatus::Tracking,
+            telescope.get_info().await.unwrap().status
+        );
+
+        // Wait 5 minutes when source moves across the sky
+        let when = when + chrono::Duration::minutes(5);
+        stream.commands.clear();
+        telescope.update_direction(when, &mut stream).await.unwrap();
+        assert_eq!(
+            TelescopeStatus::Slewing,
             telescope.get_info().await.unwrap().status
         );
     }
