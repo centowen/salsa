@@ -2,21 +2,21 @@ use crate::{Direction, Location};
 use chrono::prelude::*;
 use std::f64::consts::PI;
 
-fn julian_day(now: DateTime<Utc>) -> f64 {
-    // Calculate decimal julian day for current date. We can simplify
+fn julian_day(when: DateTime<Utc>) -> f64 {
+    // Calculate decimal julian day for specified date. We can simplify
     // since we do not need to cover dates in the past, only the future!
     // From https://aa.usno.navy.mil/data/JulianDate we get that for
     // A.D. 2000 January 1 	12:00:00.0 correspond to julian day 2451545.0.
     // Calculate difference to this date
     let jdref = Utc.with_ymd_and_hms(2000, 1, 1, 12, 0, 0).unwrap();
-    let diff = now.signed_duration_since(jdref);
+    let diff = when.signed_duration_since(jdref);
     // Need f64 for precision
     2451545.0 + (diff.num_milliseconds() as f64 / (24.0 * 60.0 * 60.0 * 1000.0))
 }
 
-fn gmst(now: DateTime<Utc>) -> f64 {
+fn gmst(when: DateTime<Utc>) -> f64 {
     // Algoritm from https://aa.usno.navy.mil/faq/GAST
-    let jd = julian_day(now);
+    let jd = julian_day(when);
     let jd0 = jd.floor() + 0.5;
     let h = (jd - jd0) * 24.0;
     let dtt = jd - 2451545.0;
