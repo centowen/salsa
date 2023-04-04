@@ -226,12 +226,12 @@ mod test {
 
     #[test]
     fn test_vlsrcorr_from_galactic() {
-        // Test that we get the correct horizontal position for the Sun
-        // given specific location and time
+        // Test that we get the correct VLSR-correction for
+        // a given Galactic coordinate and time
         let jdref = Utc.with_ymd_and_hms(2023, 4, 4, 15, 0, 0).unwrap();
         let glon = 140.0_f64.to_radians();
         let vlsrcorr = vlsrcorr_from_galactic(glon, 0.0, jdref);
-        // Expected horizontal coordinates in radians
+        // Expected VLSR correction in m/s
         let expected_vlsrcorr = -15443.385967834394;
         assert_similar!(vlsrcorr, expected_vlsrcorr, 1e-6);
     }
