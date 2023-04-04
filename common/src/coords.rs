@@ -90,6 +90,48 @@ pub fn horizontal_from_galactic(
     horizontal_from_equatorial(location, when, ra, dec)
 }
 
+fn ecliptic_from_sun (
+    when: DateTime<Utc>,
+    ) -> (f64, f64) {
+    // Algorithm from https://aa.usno.navy.mil/faq/sun_approx
+    // for computing the Sun's angular coordinates to an accuracy of about 1 arcminute within two centuries of 2000
+    let d = julian_day(when) - 2451545.0;
+    //Mean anomaly of the Sun:
+    let g = (357.529 + 0.98560028 * d) % 360.0;
+    //Mean longitude of the Sun:
+    let q = (280.459 + 0.98564736 * d) % 360.0;
+    // Geocentric apparent ecliptic longitude of the Sun (adjusted for aberration):
+    let l = (q + 1.915 *g.to_radians().sin() + 0.020 *(2.0*g).to_radians().sin()) % 360.0;
+    // where all the constants (therefore g, q, and L) are in degrees.
+    // It may be necessary or desirable to reduce g, q, and L to the range 0° to 360°.
+    //The Sun's ecliptic latitude, b, can be approximated by b=0.
+    let b = 0.0;
+    // return in radians
+    (l.to_radians(),b)
+}
+
+fn equatorial_from_sun (
+    when: DateTime<Utc>,
+    ) -> (f64, f64) {
+    // Algorithm from https://aa.usno.navy.mil/faq/sun_approx
+    // for computing the Sun's angular coordinates to an accuracy of about 1 arcminute within two centuries of 2000
+    let (l,_b) = ecliptic_from_sun(when);
+    let d = julian_day(when) - 2451545.0;
+    //First compute the mean obliquity of the ecliptic:
+    let e = (23.439 - 0.00000036 * d).to_radians();
+    let ra = (e.cos()*l.sin()).atan2(l.cos());
+    let dec = (e.sin()*l.sin()).asin();
+    (ra, dec)
+}
+
+pub fn horizontal_from_sun (
+    location: Location,
+    when: DateTime<Utc>,
+) -> Direction {
+    let (ra,dec) = equatorial_from_sun(when);
+    horizontal_from_equatorial(location, when, ra, dec)
+}
+
 #[cfg(test)]
 mod test {
     use chrono::Duration;
@@ -123,5 +165,19 @@ mod test {
             expected_jd + 365.0,
             1e-6
         );
+    }
+    #[test]
+    fn test_horizontal_from_sun() {
+        // Test that we get the correct horizontal position for the Sun
+        // given specific location and time
+        let jdref = Utc.with_ymd_and_hms(2023, 4, 4, 12, 0, 0).unwrap();
+        // Use SALSA Onsala location
+        let locref = Location {longitude: 0.20802143022, latitude: 1.00170457462};
+        let dir = horizontal_from_sun(locref, jdref);
+        // Expected horizontal coordinates in radians
+        let expected_az = 3.386904823113701;
+        let expected_alt = 0.6557470215389855;
+        assert_similar!(dir.azimuth, expected_az, 1e-6);
+        assert_similar!(dir.altitude, expected_alt, 1e-6);
     }
 }
