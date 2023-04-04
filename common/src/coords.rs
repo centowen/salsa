@@ -10,6 +10,7 @@ const EC: f64 = 0.40909260052;
 const ARA: f64 = 4.71238898038;
 const ADE: f64 = 0.52359877559;
 
+
 fn julian_day(when: DateTime<Utc>) -> f64 {
     // Calculate decimal julian day for specified date. We can simplify
     // since we do not need to cover dates in the past, only the future!
@@ -205,6 +206,7 @@ mod test {
             1e-6
         );
     }
+    
     #[test]
     fn test_horizontal_from_sun() {
         // Test that we get the correct horizontal position for the Sun
@@ -222,6 +224,7 @@ mod test {
         assert_similar!(dir.azimuth, expected_az, 1e-6);
         assert_similar!(dir.altitude, expected_alt, 1e-6);
     }
+    
     #[test]
     fn test_vlsrcorr_from_galactic() {
         // Test that we get the correct horizontal position for the Sun
