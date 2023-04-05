@@ -9,6 +9,54 @@ const EC: f64 = 0.40909260052;
 // R.A. = 18 hr = 270 deg, and Dec. = 30 deg. Define this apex as ARA, ADE:
 const ARA: f64 = 4.71238898038;
 const ADE: f64 = 0.52359877559;
+const R_EARTH: f64 = 6378.135; // Earth radius in km
+const FULL_CIRCLE: f64 = 2.0 * PI;
+
+// Function to calculate satellite position for observe at given time
+// from https://celestrak.org/columns/v02n02/
+// satellite ECI xs,ys,zs in km
+// observer lat,long in radians, alt in km
+fn horizontal_from_sat_eci(
+    xs: f64,
+    ys: f64,
+    zs: f64,
+    lat: f64,
+    lon: f64,
+    alt: f64,
+    when: DateTime<Utc>,
+) -> (f64, f64) {
+    // Calculate ECI coordinates of observer position
+    let theta = (gmst(when) + lon) % FULL_CIRCLE;
+    let r = (R_EARTH + alt) * lat.cos();
+    let xo = r * theta.cos();
+    let yo = r * theta.sin();
+    let zo = (R_EARTH + alt) * lat.sin();
+    // Form difference vector between satellite and observer
+    let rx = xs - xo;
+    let ry = ys - yo;
+    let rz = zs - zo;
+    // Rotate difference vector to topocentric system
+    let top_s = lat.sin() * theta.cos() * rx + lat.sin() * theta.sin() * ry - lat.cos() * rz;
+    let top_e = -theta.sin() * rx + theta.cos() * ry;
+    let top_z = lat.cos() * theta.cos() * rx + lat.cos() * theta.sin() * ry + lat.sin() * rz;
+    // Calculate az/el from topocentric vector
+    //
+    // It should be possible to replace the 7 lines below from the celestrack page
+    // with an atan2 function, right?
+    //let az = (-top_e/top_s).atan();
+    //if top_s > 0.0 {
+    //    let az = az + PI;
+    //}
+    //if az < 0.0 {
+    //    let az = az + FULL_CIRCLE;
+    //}
+    //
+    // Attempt at using atan2 instead:
+    let az = (top_e).atan2(-top_s);
+    let rg = (rx * rx + ry * ry + rz * rz).sqrt();
+    let el = (top_z / rg).asin();
+    (az, el)
+}
 
 fn julian_day(when: DateTime<Utc>) -> f64 {
     // Calculate decimal julian day for specified date. We can simplify
@@ -30,7 +78,9 @@ fn gmst(when: DateTime<Utc>) -> f64 {
     let dtt = jd - 2451545.0;
     let dut = jd0 - 2451545.0;
     let t = dtt / 36525.0;
-    (6.697375 + 0.065709824279 * dut + 1.0027379 * h + 0.0000258 * t * t) % 24.0
+    let gmst = (6.697375 + 0.065709824279 * dut + 1.0027379 * h + 0.0000258 * t * t) % 24.0;
+    // return GMST in radians
+    gmst * PI / 12.0
 }
 
 /// Convert equatorial coordinates to horizontal coordinates
@@ -53,15 +103,12 @@ pub fn horizontal_from_equatorial(
     let lat = location.latitude;
 
     // Equatorial to Horizontal conversion from https://aa.usno.navy.mil/faq/alt_az
-    let gast = gmst(when);
-    let ra = ra * 12.0 / PI; // hours from radians
-    let lha = (gast - ra) * 15.0_f64.to_radians() + lon;
+    let lha = (gmst(when) - ra).to_radians() * (15.0 * 12.0 / PI) + lon;
     let alt = (lha.cos() * dec.cos() * lat.cos() + dec.sin() * lat.sin()).asin();
     let az = (-lha.sin()).atan2(dec.tan() * lat.cos() - lat.sin() * lha.cos());
 
     // Ensure positive az
-    let full_circle = 2.0 * PI;
-    let az = ((az % full_circle) + full_circle) % full_circle;
+    let az = ((az % FULL_CIRCLE) + FULL_CIRCLE) % FULL_CIRCLE;
 
     Direction {
         azimuth: az,
@@ -234,5 +281,21 @@ mod test {
         // Expected VLSR correction in m/s
         let expected_vlsrcorr = -15443.385967834394;
         assert_similar!(vlsrcorr, expected_vlsrcorr, 1e-6);
+    }
+
+    #[test]
+    fn test_horizontal_from_sat_eci() {
+        //fn horizontal_from_sat_eci(xs: f64, ys: f64, zs: f64, lat: f64, lon: f64, alt: f64, when: DateTime<Utc>) -> (f64, f64) {
+        // Test that we get the correct horizontal position for a satellite
+        // with given ECI position at given time and location
+        let jdref = Utc.with_ymd_and_hms(2023, 4, 5, 14, 0, 0).unwrap();
+        let lon: f64 = 0.20802143022; // Obs lon
+        let lat: f64 = 1.00170457462; // Obs lat
+        let alt: f64 = 0.0; // Obs alt in km
+        let eci = (-22923.01754858807, 6273.375502631187, 17649.65857168936);
+        let expected_hor = (54.385157764497684, 8.823870387817111);
+        let hor = horizontal_from_sat_eci(eci.0, eci.1, eci.2, lat, lon, alt, jdref);
+        assert_similar!(hor.0.to_degrees(), expected_hor.0, 1e-6);
+        assert_similar!(hor.1.to_degrees(), expected_hor.1, 1e-6);
     }
 }
