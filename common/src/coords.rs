@@ -40,19 +40,10 @@ fn horizontal_from_sat_eci(
     let top_e = -theta.sin() * rx + theta.cos() * ry;
     let top_z = lat.cos() * theta.cos() * rx + lat.cos() * theta.sin() * ry + lat.sin() * rz;
     // Calculate az/el from topocentric vector
-    //
-    // It should be possible to replace the 7 lines below from the celestrack page
-    // with an atan2 function, right?
-    //let az = (-top_e/top_s).atan();
-    //if top_s > 0.0 {
-    //    let az = az + PI;
-    //}
-    //if az < 0.0 {
-    //    let az = az + FULL_CIRCLE;
-    //}
-    //
-    // Attempt at using atan2 instead:
+    // Use atan2 instead of celestrack tan logic:
     let az = (top_e).atan2(-top_s);
+    // Ensure positive az
+    let az = ((az % FULL_CIRCLE) + FULL_CIRCLE) % FULL_CIRCLE;
     let rg = (rx * rx + ry * ry + rz * rz).sqrt();
     let el = (top_z / rg).asin();
     (az, el)
