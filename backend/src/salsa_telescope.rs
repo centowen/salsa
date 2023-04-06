@@ -88,6 +88,21 @@ impl TelescopeCommand {
     }
 }
 
+pub struct Measurement {
+    data: Vec<f64>,
+    glon: f64,
+    glat: f64,
+    nchan: usize,
+    ch0freq: f64,
+    chres: f64,
+    start: DateTime<Utc>,
+    duration: Option<chrono::Duration>,
+    vlsr_correction: f64,
+    telname: String,
+    tellat: f64,
+    tellon: f64,
+}
+
 pub struct SalsaTelescope {
     address: String,
     timeout: Duration,
@@ -100,6 +115,7 @@ pub struct SalsaTelescope {
     lowest_allowed_altitude: f64,
     telescope_restart_request_at: Option<DateTime<Utc>>,
     wait_time_after_restart: chrono::Duration,
+    measurements: Vec<Measurement>,
 }
 
 pub fn create(telescope_address: String) -> SalsaTelescope {
@@ -118,6 +134,8 @@ pub fn create(telescope_address: String) -> SalsaTelescope {
         lowest_allowed_altitude: LOWEST_ALLOWED_ALTITUDE,
         telescope_restart_request_at: None,
         wait_time_after_restart: chrono::Duration::seconds(10),
+        measurements: Vec::new(),
+
     }
 }
 
