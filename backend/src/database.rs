@@ -1,6 +1,7 @@
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::io;
+use std::io::Write;
 use std::sync::Arc;
 use thiserror::Error;
 use tokio::fs;
@@ -28,7 +29,7 @@ pub struct DataBase<T> {
 
 impl<T> DataBase<T>
 where
-    T: DeserializeOwned + Serialize,
+    T: DeserializeOwned + Serialize + Default,
 {
     pub fn from_data(data: T) -> Self {
         Self {
@@ -38,10 +39,22 @@ where
     }
 
     pub async fn from_file(filename: &str) -> Result<Self, DataBaseError> {
-        // TODO: Create file if it doesn't exist
-        // (tokio::fs::OpenOptions.create_new()) or fall back to in-memory.
-        let serialized_data = fs::read_to_string(filename).await?;
-        let data = serde_json::from_str::<T>(&serialized_data)?;
+        let data = match fs::read_to_string(filename).await {
+            Ok(serialized_data) => serde_json::from_str::<T>(&serialized_data)?,
+            Err(error) => {
+                if matches!(error.kind(), io::ErrorKind::NotFound) {
+                    let data = T::default();
+                    let mut file = std::fs::OpenOptions::new()
+                        .create_new(true)
+                        .write(true)
+                        .open(filename)?;
+                    file.write(serde_json::to_string_pretty(&data)?.as_bytes())?;
+                    data
+                } else {
+                    Err(error)?
+                }
+            }
+        };
         Ok(Self {
             cache: Arc::new(RwLock::new(data)),
             filename: Some(filename.to_string()),
