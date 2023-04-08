@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use common::{
-    Direction, ReceiverConfiguration, ReceiverError, TelescopeError, TelescopeInfo, TelescopeTarget,
+    Direction, ReceiverConfiguration, ReceiverError, TelescopeError, TelescopeInfo, TelescopeTarget, Measurement,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -24,6 +24,7 @@ pub trait Telescope: Send + Sync {
     async fn get_info(&self) -> Result<TelescopeInfo, TelescopeError>;
     async fn update(&mut self, delta_time: Duration) -> Result<(), TelescopeError>;
     async fn restart(&mut self) -> Result<(), TelescopeError>;
+    async fn measure(&self, measurement: &mut Measurement) -> Result<(), ReceiverError>;
 }
 
 pub type TelescopeContainer = Arc<Mutex<dyn Telescope>>;

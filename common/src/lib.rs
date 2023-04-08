@@ -104,3 +104,17 @@ pub struct Booking {
     pub telescope_name: String,
     pub user_name: String,
 }
+
+#[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
+pub struct Measurement {
+    pub amps: Vec<f64>,
+    pub freqs : Vec<f64>,
+    //glon: f64,
+    //glat: f64,
+    //start: DateTime<Utc>,
+    //stop: Option<DateTime<Utc>>,
+    //vlsr_correction: Option<f64>,
+    //telname: String,
+    //tellat: f64,
+    //tellon: f64,
+}

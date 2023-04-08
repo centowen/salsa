@@ -4,13 +4,18 @@ use chrono::{DateTime, Utc};
 use common::coords::{horizontal_from_equatorial, horizontal_from_galactic};
 use common::{
     Direction, Location, ReceiverConfiguration, ReceiverError, TelescopeError, TelescopeInfo,
-    TelescopeStatus, TelescopeTarget,
+    TelescopeStatus, TelescopeTarget, Measurement,
 };
 use hex_literal::hex;
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpStream};
 use std::str::FromStr;
 use std::time::Duration;
+
+use median::Filter;
+use rustfft::{FftPlanner, num_complex::Complex};
+use uhd::{self, StreamCommand, StreamCommandType, StreamTime, TuneRequest, Usrp};
+
 
 pub const LOWEST_ALLOWED_ALTITUDE: f64 = 5.0f64 / 180.0f64 * std::f64::consts::PI;
 
@@ -88,21 +93,6 @@ impl TelescopeCommand {
     }
 }
 
-pub struct Measurement {
-    data: Vec<f64>,
-    glon: f64,
-    glat: f64,
-    nchan: usize,
-    ch0freq: f64,
-    chres: f64,
-    start: DateTime<Utc>,
-    duration: Option<chrono::Duration>,
-    vlsr_correction: f64,
-    telname: String,
-    tellat: f64,
-    tellon: f64,
-}
-
 pub struct SalsaTelescope {
     address: String,
     timeout: Duration,
@@ -111,6 +101,7 @@ pub struct SalsaTelescope {
     current_direction: Option<Direction>,
     location: Location,
     most_recent_error: Option<TelescopeError>,
+    receiver_configuration: ReceiverConfiguration,
     connection_established: bool,
     lowest_allowed_altitude: f64,
     telescope_restart_request_at: Option<DateTime<Utc>>,
@@ -130,6 +121,7 @@ pub fn create(telescope_address: String) -> SalsaTelescope {
             latitude: 1.00170457462,  //(57.0+23.0/60.0+36.4/3600.0) * PI / 180.0
         },
         most_recent_error: None,
+        receiver_configuration: ReceiverConfiguration { integrate: false },
         connection_established: false,
         lowest_allowed_altitude: LOWEST_ALLOWED_ALTITUDE,
         telescope_restart_request_at: None,
@@ -200,9 +192,163 @@ fn rot2prog_angle_to_bytes(angle: f64) -> [u8; 5] {
     bytes[4] = (angle % 10.0) as u8 + 0x30;
     bytes
 }
+    
+fn measure_switched(
+    usrp: &mut Usrp,
+    sfreq: f64,
+    rfreq: f64,
+    fft_pts: usize,
+    tint: f64,
+    avg_pts: usize,
+    srate: f64,
+    spec: &mut Vec<f64>,
+) {
+    let mut spec_sig: Vec<f64> = vec![];
+    measure_single(
+        usrp,
+        sfreq,
+        fft_pts,
+        0.5 * tint,
+        avg_pts,
+        srate,
+        &mut spec_sig,
+    );
+    let mut spec_ref: Vec<f64> = vec![];
+    measure_single(
+        usrp,
+        rfreq,
+        fft_pts,
+        0.5 * tint,
+        avg_pts,
+        srate,
+        &mut spec_ref,
+    );
+    for i in 0..avg_pts {
+        spec[i] = spec[i] + (0.5 * (spec_sig[i] - spec_ref[i]));
+    }
+}
+
+fn measure_single(
+    usrp: &mut Usrp,
+    cfreq: f64,
+    fft_pts: usize,
+    tint: f64,
+    avg_pts: usize,
+    srate: f64,
+    fft_avg: &mut Vec<f64>,
+) {
+    let nsamp: f64 = tint * srate; // total number of samples to request
+    let nstack: usize = (nsamp as usize) / fft_pts;
+    let navg: usize = fft_pts / avg_pts;
+
+    usrp.set_rx_frequency(&TuneRequest::with_frequency(cfreq), 0)
+        .unwrap(); // The N210 only has one input channel 0.
+
+    let mut receiver = usrp
+        .get_rx_stream(&uhd::StreamArgs::<Complex<i16>>::new("sc16"))
+        .unwrap();
+
+    let mut buffer = vec![Complex::<i16>::default(); nsamp as usize];
+
+    receiver
+        .send_command(&StreamCommand {
+            command_type: StreamCommandType::CountAndDone(buffer.len() as u64),
+            time: StreamTime::Now,
+        })
+        .unwrap();
+    receiver.receive_simple(buffer.as_mut()).unwrap();
+
+    log::info!("Doing FFT...");
+    // array to store power spectrum (abs of FFT result)
+    let mut fft_abs: Vec<f64> = Vec::with_capacity(fft_pts);
+    fft_abs.resize(fft_pts, 0.0);
+    // setup fft
+    let mut planner = FftPlanner::new();
+    let fft = planner.plan_fft_forward(fft_pts);
+    // Loop through the samples, taking FFF_POINTS each time
+    for n in 0..nstack {
+        let mut fft_buffer: Vec<Complex<f64>> = buffer[n * fft_pts..(n + 1) * fft_pts]
+            .iter()
+            .copied()
+            .map(|x| Complex::<f64>::new(x.re as f64, x.im as f64))
+            .collect();
+        // Do the FFT
+        fft.process(&mut fft_buffer);
+        // Add absolute values to stacked spectrum
+        // Seems the pos/neg halves of spectrum are flipped, so reflip them
+        for i in 0..fft_pts / 2 {
+            fft_abs[i + fft_pts / 2] = fft_abs[i + fft_pts / 2] + fft_buffer[i].norm();
+            fft_abs[i] = fft_abs[i] + fft_buffer[i + fft_pts / 2].norm();
+        }
+    }
+    log::info!("Normalise...");
+    // Normalise spectrum by number of stackings,
+    // do **2 to get power spectrum, and median filter
+    // also lot max/min for plotting
+    let mut filter = Filter::new(21);
+    for i in 0..fft_pts {
+        fft_abs[i] = fft_abs[i] * fft_abs[i] / (nstack as f64);
+        fft_abs[i] = filter.consume(fft_abs[i]);
+    }
+
+    // Average spectrum to save data
+    for i in 0..avg_pts {
+        let mut avg = 0.0;
+        for j in navg * i..navg * (i + 1) {
+            avg = avg + fft_abs[j];
+        }
+        fft_avg.push(avg / (navg as f64));
+    }
+}
 
 #[async_trait]
 impl Telescope for SalsaTelescope {
+    async fn measure(&self, measurement: &mut Measurement) -> Result<(), ReceiverError> {
+        log::info!("Starting measurement...");
+    
+        let fft_pts: usize = 4096; // ^2 Number of points in FFT, setting spectral resolution
+        let avg_pts: usize = 512; // ^2 Number of points after average, setting spectral resolution
+        let gain: f64 = 40.0;
+    
+        // Setup usrp for taking data
+        let mut usrp = Usrp::open("addr=192.168.5.31").unwrap(); // Brage
+        // The N210 only has one input channel 0.
+        usrp.set_rx_gain(gain, 0, "").unwrap(); // empty string to set all gains
+        usrp.set_rx_antenna("TX/RX", 0).unwrap();
+        usrp.set_rx_dc_offset_enabled(true, 0).unwrap();
+    
+        // Switched HI example
+        let tint: f64 = 1.0; // integration time per cycle, seconds
+        let srate: f64 = 2.5e6; // sample rate, Hz
+        let sfreq: f64 = 1.4204e9;
+        let rfreq: f64 = 1.4179e9;
+        usrp.set_rx_sample_rate(srate as f64, 0).unwrap();
+    
+        // start taking data until integrate is false
+        let mut n = 0.0;
+        while self.receiver_configuration.integrate {
+            let mut spec = Vec::with_capacity(avg_pts);
+            spec.resize(avg_pts, 0.0);
+            log::info!("Cycle switch measurement...");
+            measure_switched(
+                &mut usrp,
+                sfreq,
+                rfreq,
+                fft_pts,
+                tint,
+                avg_pts,
+                srate,
+                &mut spec,
+            );
+            n = n + 1.0;
+            // Add last measurement to the pile, normalising
+            for i in 0..avg_pts {
+                measurement.amps[i] = (measurement.amps[i]*(n-1.0) + spec[i])/n;
+            }
+        }
+        Ok(())
+    }
+    
     async fn get_direction(&self) -> Result<Direction, TelescopeError> {
         let mut stream = create_connection(&self)?;
 
@@ -227,9 +373,24 @@ impl Telescope for SalsaTelescope {
 
     async fn set_receiver_configuration(
         &mut self,
-        _receiver_configuration: ReceiverConfiguration,
+        receiver_configuration: ReceiverConfiguration,
     ) -> Result<ReceiverConfiguration, ReceiverError> {
-        todo!()
+        if receiver_configuration.integrate && !self.receiver_configuration.integrate {
+            log::info!("Starting integration");
+            self.receiver_configuration.integrate = true;
+            let navg = 512;
+            let mut amps = Vec::with_capacity(navg);
+            amps.resize(navg, 0.0);
+            let mut freqs = Vec::with_capacity(navg);
+            freqs.resize(navg, 0.0);
+            let mut m = Measurement{amps: amps, freqs: freqs};
+            //self.measurements.push(m);
+            self.measure(&mut m).await?;
+        } else if !receiver_configuration.integrate && self.receiver_configuration.integrate {
+            log::info!("Stopping integration");
+            self.receiver_configuration.integrate = false;
+        }
+        Ok(self.receiver_configuration)
     }
 
     async fn get_info(&self) -> Result<TelescopeInfo, TelescopeError> {
@@ -255,7 +416,7 @@ impl Telescope for SalsaTelescope {
             commanded_horizontal: self.commanded_horizontal,
             current_target: self.target,
             most_recent_error: self.most_recent_error.clone(),
-            measurement_in_progress: false,
+            measurement_in_progress: self.receiver_configuration.integrate,
             latest_observation: None,
         })
     }
