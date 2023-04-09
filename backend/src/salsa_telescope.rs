@@ -8,6 +8,9 @@ use common::{
 };
 use hex_literal::hex;
 use tokio_util::sync::CancellationToken;
+use std::sync::Arc;
+use tokio::sync::{Mutex, RwLock};
+
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpStream};
 use std::str::FromStr;
@@ -133,7 +136,7 @@ pub fn create(telescope_address: String) -> SalsaTelescope {
         lowest_allowed_altitude: LOWEST_ALLOWED_ALTITUDE,
         telescope_restart_request_at: None,
         wait_time_after_restart: chrono::Duration::seconds(10),
-        measurements: Vec::new(),
+        measurements: Arc::new(Mutex::new(Vec::new())),
         active_integration: None,
     }
 }
@@ -308,13 +311,13 @@ fn measure_single(
     }
 }
 
-async fn measure(measurements: Arc<Mutex<Vec<Measurement>>>, cancellation_token: tokio_util::sync::CancelationToken) -> Result<(), ReceiverError> {
+async fn measure(measurements: Arc<Mutex<Vec<Measurement>>>, cancellation_token: tokio_util::sync::CancellationToken) -> () {
     let avg_pts: usize = 512; // ^2 Number of points after average, setting spectral resolution
 
     {
         let mut amps = vec![0.0; avg_pts];
         let mut freqs = vec![0.0; avg_pts];
-        let measurements = measurements.lock_owned().await.unwrap();
+        let measurements = measurements.lock_owned().await;
         let mut measurement = Measurement{amps: amps, freqs: freqs};
         measurements.push(measurement);
     }
@@ -341,7 +344,7 @@ async fn measure(measurements: Arc<Mutex<Vec<Measurement>>>, cancellation_token:
 
     // start taking data until integrate is false
     let mut n = 0.0;
-    while !cancellation_token.cancelled() {
+    while !cancellation_token.is_cancelled() {
         let mut spec = vec![0.0; avg_pts];
         log::info!("Cycle switch measurement...");
         measure_switched(
@@ -356,14 +359,13 @@ async fn measure(measurements: Arc<Mutex<Vec<Measurement>>>, cancellation_token:
         );
         n = n + 1.0;
 
-        let measurements = measurements.lock().unwrap();
-        let measurement = measurements.last().unwrap();
+        let measurements = measurements.lock();
+        let measurement = measurements.await.last();
         for i in 0..avg_pts {
             measurement[i] = (measurement.amps[i]*(n-1.0) + spec[i])/n;
         }
     }
 
-    Ok(())
 }
 
 #[async_trait]
@@ -402,9 +404,8 @@ impl Telescope for SalsaTelescope {
 
             log::info!("Starting integration");
             self.receiver_configuration.integrate = true;
-            self.active_integration = Some();
             let cancellationToken = tokio_util::sync::CancellationToken::new();
-            let measurement_task = tokio::spawn(async move {measure(self.measurements.clone(), cancellationToken.clone()).await? } );
+            let measurement_task = tokio::spawn(async move {measure(self.measurements.clone(), cancellationToken.clone()).await } );
             self.active_integration = Some(ActiveIntegration { cancellation_token: cancellationToken, measurement_task: measurement_task });
         } else if !receiver_configuration.integrate && self.receiver_configuration.integrate {
             log::info!("Stopping integration");
@@ -464,7 +465,7 @@ impl Telescope for SalsaTelescope {
         };
 
         if let Some(active_integration) = &self.active_integration {
-            if active_integration.cancellation_token.cancelled() {
+            if active_integration.cancellation_token.is_cancelled() {
                 active_integration.measurement_task.await;
                 self.active_integration = None;
             }

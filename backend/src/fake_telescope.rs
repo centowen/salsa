@@ -49,9 +49,6 @@ pub fn create(name: String) -> FakeTelescope {
 
 #[async_trait]
 impl Telescope for FakeTelescope {
-    async fn measure(&self, measurement: &mut Measurement) -> Result<(), ReceiverError> {
-        todo!();
-    }
     async fn get_direction(&self) -> Result<Direction, TelescopeError> {
         Ok(self.horizontal)
     }
