@@ -7,6 +7,7 @@ use common::{
     TelescopeStatus, TelescopeTarget, Measurement,
 };
 use hex_literal::hex;
+use tokio_util::sync::CancellationToken;
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpStream};
 use std::str::FromStr;
@@ -93,6 +94,11 @@ impl TelescopeCommand {
     }
 }
 
+pub struct ActiveIntegration {
+    cancellation_token: tokio_util::sync::CancellationToken,
+    measurement_task: tokio::task::JoinHandle<()>,
+}
+
 pub struct SalsaTelescope {
     address: String,
     timeout: Duration,
@@ -106,7 +112,8 @@ pub struct SalsaTelescope {
     lowest_allowed_altitude: f64,
     telescope_restart_request_at: Option<DateTime<Utc>>,
     wait_time_after_restart: chrono::Duration,
-    measurements: Vec<Measurement>,
+    measurements: Arc<Mutex<Vec<Measurement>>>,
+    active_integration: Option<ActiveIntegration>,
 }
 
 pub fn create(telescope_address: String) -> SalsaTelescope {
@@ -127,7 +134,7 @@ pub fn create(telescope_address: String) -> SalsaTelescope {
         telescope_restart_request_at: None,
         wait_time_after_restart: chrono::Duration::seconds(10),
         measurements: Vec::new(),
-
+        active_integration: None,
     }
 }
 
@@ -301,53 +308,66 @@ fn measure_single(
     }
 }
 
+async fn measure(measurements: Arc<Mutex<Vec<Measurement>>>, cancellation_token: tokio_util::sync::CancelationToken) -> Result<(), ReceiverError> {
+    let avg_pts: usize = 512; // ^2 Number of points after average, setting spectral resolution
+
+    {
+        let mut amps = vec![0.0; avg_pts];
+        let mut freqs = vec![0.0; avg_pts];
+        let measurements = measurements.lock_owned().await.unwrap();
+        let mut measurement = Measurement{amps: amps, freqs: freqs};
+        measurements.push(measurement);
+    }
+
+    log::info!("Starting measurement...");
+
+    let fft_pts: usize = 4096; // ^2 Number of points in FFT, setting spectral resolution
+    let gain: f64 = 40.0;
+
+    // Setup usrp for taking data
+    let mut usrp = Usrp::open("addr=192.168.5.31").unwrap(); // Brage
+    // The N210 only has one input channel 0.
+    usrp.set_rx_gain(gain, 0, "").unwrap(); // empty string to set all gains
+    usrp.set_rx_antenna("TX/RX", 0).unwrap();
+    usrp.set_rx_dc_offset_enabled(true, 0).unwrap();
+
+    // Switched HI example
+    let tint: f64 = 1.0; // integration time per cycle, seconds
+    let srate: f64 = 2.5e6; // sample rate, Hz
+    let sfreq: f64 = 1.4204e9;
+    let rfreq: f64 = 1.4179e9;
+    usrp.set_rx_sample_rate(srate as f64, 0).unwrap();
+
+
+    // start taking data until integrate is false
+    let mut n = 0.0;
+    while !cancellation_token.cancelled() {
+        let mut spec = vec![0.0; avg_pts];
+        log::info!("Cycle switch measurement...");
+        measure_switched(
+            &mut usrp,
+            sfreq,
+            rfreq,
+            fft_pts,
+            tint,
+            avg_pts,
+            srate,
+            &mut spec,
+        );
+        n = n + 1.0;
+
+        let measurements = measurements.lock().unwrap();
+        let measurement = measurements.last().unwrap();
+        for i in 0..avg_pts {
+            measurement[i] = (measurement.amps[i]*(n-1.0) + spec[i])/n;
+        }
+    }
+
+    Ok(())
+}
+
 #[async_trait]
 impl Telescope for SalsaTelescope {
-    async fn measure(&self, measurement: &mut Measurement) -> Result<(), ReceiverError> {
-        log::info!("Starting measurement...");
-    
-        let fft_pts: usize = 4096; // ^2 Number of points in FFT, setting spectral resolution
-        let avg_pts: usize = 512; // ^2 Number of points after average, setting spectral resolution
-        let gain: f64 = 40.0;
-    
-        // Setup usrp for taking data
-        let mut usrp = Usrp::open("addr=192.168.5.31").unwrap(); // Brage
-        // The N210 only has one input channel 0.
-        usrp.set_rx_gain(gain, 0, "").unwrap(); // empty string to set all gains
-        usrp.set_rx_antenna("TX/RX", 0).unwrap();
-        usrp.set_rx_dc_offset_enabled(true, 0).unwrap();
-    
-        // Switched HI example
-        let tint: f64 = 1.0; // integration time per cycle, seconds
-        let srate: f64 = 2.5e6; // sample rate, Hz
-        let sfreq: f64 = 1.4204e9;
-        let rfreq: f64 = 1.4179e9;
-        usrp.set_rx_sample_rate(srate as f64, 0).unwrap();
-    
-        // start taking data until integrate is false
-        let mut n = 0.0;
-        while self.receiver_configuration.integrate {
-            let mut spec = Vec::with_capacity(avg_pts);
-            spec.resize(avg_pts, 0.0);
-            log::info!("Cycle switch measurement...");
-            measure_switched(
-                &mut usrp,
-                sfreq,
-                rfreq,
-                fft_pts,
-                tint,
-                avg_pts,
-                srate,
-                &mut spec,
-            );
-            n = n + 1.0;
-            // Add last measurement to the pile, normalising
-            for i in 0..avg_pts {
-                measurement.amps[i] = (measurement.amps[i]*(n-1.0) + spec[i])/n;
-            }
-        }
-        Ok(())
-    }
     
     async fn get_direction(&self) -> Result<Direction, TelescopeError> {
         let mut stream = create_connection(&self)?;
@@ -376,18 +396,19 @@ impl Telescope for SalsaTelescope {
         receiver_configuration: ReceiverConfiguration,
     ) -> Result<ReceiverConfiguration, ReceiverError> {
         if receiver_configuration.integrate && !self.receiver_configuration.integrate {
+            if self.active_integration.is_some() {
+                return Err(ReceiverError::IntegrationAlreadyRunning);
+            }
+
             log::info!("Starting integration");
             self.receiver_configuration.integrate = true;
-            let navg = 512;
-            let mut amps = Vec::with_capacity(navg);
-            amps.resize(navg, 0.0);
-            let mut freqs = Vec::with_capacity(navg);
-            freqs.resize(navg, 0.0);
-            let mut m = Measurement{amps: amps, freqs: freqs};
-            //self.measurements.push(m);
-            self.measure(&mut m).await?;
+            self.active_integration = Some();
+            let cancellationToken = tokio_util::sync::CancellationToken::new();
+            let measurement_task = tokio::spawn(async move {measure(self.measurements.clone(), cancellationToken.clone()).await? } );
+            self.active_integration = Some(ActiveIntegration { cancellation_token: cancellationToken, measurement_task: measurement_task });
         } else if !receiver_configuration.integrate && self.receiver_configuration.integrate {
             log::info!("Stopping integration");
+            self.active_integration.unwrap().cancellation_token.cancel();
             self.receiver_configuration.integrate = false;
         }
         Ok(self.receiver_configuration)
@@ -416,7 +437,7 @@ impl Telescope for SalsaTelescope {
             commanded_horizontal: self.commanded_horizontal,
             current_target: self.target,
             most_recent_error: self.most_recent_error.clone(),
-            measurement_in_progress: self.receiver_configuration.integrate,
+            measurement_in_progress: self.active_integration.is_some(),
             latest_observation: None,
         })
     }
@@ -441,6 +462,13 @@ impl Telescope for SalsaTelescope {
                 return Err(error);
             }
         };
+
+        if let Some(active_integration) = &self.active_integration {
+            if active_integration.cancellation_token.cancelled() {
+                active_integration.measurement_task.await;
+                self.active_integration = None;
+            }
+        }
 
         //log::info!("Updating telescope");
         self.update_direction(now, &mut stream).await?;

@@ -63,7 +63,9 @@ pub enum TelescopeError {
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Debug, Copy, Clone)]
-pub enum ReceiverError {}
+pub enum ReceiverError {
+    IntegrationAlreadyRunning
+}
 
 impl Display for TelescopeError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
