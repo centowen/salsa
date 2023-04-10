@@ -357,8 +357,8 @@ async fn measure(measurements: Arc<Mutex<Vec<Measurement>>>, cancellation_token:
         );
         n = n + 1.0;
 
-        let measurements = measurements.lock();
-        let measurement = measurements.await.last().unwrap();
+        let mut measurements = measurements.lock().await;
+        let measurement = measurements.last_mut().unwrap();
         for i in 0..avg_pts {
             measurement.amps[i] = (measurement.amps[i]*(n-1.0) + spec[i])/n;
         }
