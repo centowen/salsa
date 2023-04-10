@@ -315,10 +315,8 @@ async fn measure(measurements: Arc<Mutex<Vec<Measurement>>>, cancellation_token:
     let avg_pts: usize = 512; // ^2 Number of points after average, setting spectral resolution
 
     {
-        let mut amps = vec![0.0; avg_pts];
-        let mut freqs = vec![0.0; avg_pts];
-        let measurements = measurements.lock_owned().await;
-        let mut measurement = Measurement{amps: amps, freqs: freqs};
+        let mut measurements = measurements.clone().lock_owned().await;
+        let measurement = Measurement{amps: vec![0.0; avg_pts], freqs: vec![0.0; avg_pts]};
         measurements.push(measurement);
     }
 
@@ -360,9 +358,9 @@ async fn measure(measurements: Arc<Mutex<Vec<Measurement>>>, cancellation_token:
         n = n + 1.0;
 
         let measurements = measurements.lock();
-        let measurement = measurements.await.last();
+        let measurement = measurements.await.last().unwrap();
         for i in 0..avg_pts {
-            measurement[i] = (measurement.amps[i]*(n-1.0) + spec[i])/n;
+            measurement.amps[i] = (measurement.amps[i]*(n-1.0) + spec[i])/n;
         }
     }
 
