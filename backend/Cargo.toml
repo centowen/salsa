@@ -25,6 +25,7 @@ warp = { version = "0.3.3" }
 uhd= { git="https://github.com/centowen/uhd-rust.git", branch="remove_enumerate_registers" }
 median = "0.3.2"
 rustfft="*"
+thiserror = "1.0.40"
 
 [dev-dependencies]
 

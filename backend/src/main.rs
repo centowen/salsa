@@ -1,5 +1,7 @@
+use crate::database::DataBase;
 use crate::telescope::{create_telescope_collection, TELESCOPE_UPDATE_INTERVAL};
 use clap::Parser;
+use common::Booking;
 use std::net::Ipv4Addr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -8,6 +10,7 @@ use warp::http::Method;
 use warp::Filter;
 
 mod booking_routes;
+mod database;
 mod fake_telescope;
 mod frontend_routes;
 mod salsa_telescope;
@@ -80,11 +83,15 @@ async fn main() {
     };
     log::info!("Started {} telescope services", telescope_services.len());
 
+    let database = DataBase::<Vec<Booking>>::from_file("database.json")
+        .await
+        .unwrap();
+
     let weather_routes = warp::path!("api" / "weather").map(weather::get_weather_info);
 
     let routes = frontend_routes::routes(args.frontend_path.clone())
         .or(weather_routes)
-        .or(booking_routes::routes())
+        .or(booking_routes::routes(database))
         .or(telescope_routes::routes(telescopes))
         .with(
             warp::cors()
