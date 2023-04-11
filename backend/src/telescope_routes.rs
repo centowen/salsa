@@ -145,8 +145,10 @@ mod handlers {
         id: String,
         telescopes: TelescopeCollection,
     ) -> Result<impl Reply, Rejection> {
-        let telescope = get_telescope(telescopes, &id).await?;
-        let info = telescope.get_info().await;
+        let info = {
+            let telescope = get_telescope(telescopes, &id).await?;
+            telescope.get_info().await
+        };
         Ok(warp::reply::json(&info))
     }
 

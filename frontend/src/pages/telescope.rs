@@ -42,7 +42,9 @@ pub enum TelescopePageReceiverError {
 
 impl From<ReceiverError> for TelescopePageReceiverError {
     fn from(value: ReceiverError) -> Self {
-        match value {}
+        match value {
+            ReceiverError::IntegrationAlreadyRunning => TelescopePageReceiverError::RequestError,
+        }
     }
 }
 
@@ -73,7 +75,7 @@ impl Component for TelescopePage {
     fn create(ctx: &Context<Self>) -> Self {
         let info_cb = ctx.link().callback(Message::UpdateInfo);
         let endpoint = format!("/api/telescope/{}", &ctx.props().id);
-        emit_info(info_cb, endpoint, Duration::from_millis(200));
+        emit_info(info_cb, endpoint, Duration::from_millis(1000));
         Self {
             configured_target: TelescopeTarget::Parked,
             tracking_configured: false,
@@ -328,13 +330,13 @@ impl Component for TelescopePage {
                         >
                             {"Stop"}
                         </button>
-                        if let Some(observation) = info.latest_observation.as_ref() {
+                        if let Some(measurement) = info.latest_observation.as_ref() {
                             <div>{format!("Integration time: {}s",
-                                          observation.observation_time.as_secs())}</div>
+                                          measurement.observation_time.as_secs())}</div>
                             <div>
                                 <Graph id="spectra"
-                                       x={observation.frequencies.clone()}
-                                       y={observation.spectra.clone()} />
+                                       x={measurement.frequencies.clone()}
+                                       y={measurement.spectra.clone()} />
                             </div>
                         }
                     } else {

@@ -39,8 +39,8 @@ pub enum TelescopeStatus {
 
 #[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
 pub struct ObservedSpectra {
-    pub frequencies: Vec<f32>,
-    pub spectra: Vec<f32>,
+    pub frequencies: Vec<f64>,
+    pub spectra: Vec<f64>,
     pub observation_time: Duration,
 }
 
@@ -63,7 +63,9 @@ pub enum TelescopeError {
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Debug, Copy, Clone)]
-pub enum ReceiverError {}
+pub enum ReceiverError {
+    IntegrationAlreadyRunning,
+}
 
 impl Display for TelescopeError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -103,4 +105,19 @@ pub struct Booking {
     pub end_time: DateTime<Utc>,
     pub telescope_name: String,
     pub user_name: String,
+}
+
+#[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
+pub struct Measurement {
+    pub amps: Vec<f64>,
+    pub freqs: Vec<f64>,
+    //glon: f64,
+    //glat: f64,
+    pub start: DateTime<Utc>,
+    pub duration: Duration,
+    //stop: Option<DateTime<Utc>>,
+    //vlsr_correction: Option<f64>,
+    //telname: String,
+    //tellat: f64,
+    //tellon: f64,
 }
