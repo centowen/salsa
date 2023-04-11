@@ -3,8 +3,8 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use common::coords::{horizontal_from_equatorial, horizontal_from_galactic};
 use common::{
-    Direction, Location, Measurement, ReceiverConfiguration, ReceiverError, TelescopeError,
-    TelescopeInfo, TelescopeStatus, TelescopeTarget,
+    Direction, Location, Measurement, ObservedSpectra, ReceiverConfiguration, ReceiverError,
+    TelescopeError, TelescopeInfo, TelescopeStatus, TelescopeTarget,
 };
 use hex_literal::hex;
 use std::sync::Arc;
@@ -314,14 +314,24 @@ async fn measure(
     measurements: Arc<Mutex<Vec<Measurement>>>,
     cancellation_token: tokio_util::sync::CancellationToken,
 ) -> () {
+    // Switched HI example
+    let tint: f64 = 1.0; // integration time per cycle, seconds
+    let srate: f64 = 2.5e6; // sample rate, Hz
+    let sfreq: f64 = 1.4204e9;
+    let rfreq: f64 = 1.4179e9;
     let avg_pts: usize = 512; // ^2 Number of points after average, setting spectral resolution
 
     {
         let mut measurements = measurements.clone().lock_owned().await;
-        let measurement = Measurement {
+        let mut measurement = Measurement {
             amps: vec![0.0; avg_pts],
             freqs: vec![0.0; avg_pts],
+            start: Utc::now(),
+            duration: Duration::from_secs(0),
         };
+        for i in 0..avg_pts {
+            measurement.freqs[i] = sfreq + srate * ((i/avg_pts) as f64);
+        }
         measurements.push(measurement);
     }
 
@@ -331,20 +341,22 @@ async fn measure(
     let gain: f64 = 40.0;
 
     // Setup usrp for taking data
-    let mut usrp = Usrp::open("addr=192.168.5.31").unwrap(); // Brage
-                                                             // The N210 only has one input channel 0.
+    //let mut usrp = Usrp::open("addr=192.168.5.31").unwrap(); // Brage
+    let mut usrp = Usrp::open("addr=192.168.5.32").unwrap(); // Vale
+
+    // The N210 only has one input channel 0.
     usrp.set_rx_gain(gain, 0, "").unwrap(); // empty string to set all gains
     usrp.set_rx_antenna("TX/RX", 0).unwrap();
     usrp.set_rx_dc_offset_enabled(true, 0).unwrap();
 
-    // Switched HI example
-    let tint: f64 = 1.0; // integration time per cycle, seconds
-    let srate: f64 = 2.5e6; // sample rate, Hz
-    let sfreq: f64 = 1.4204e9;
-    let rfreq: f64 = 1.4179e9;
     usrp.set_rx_sample_rate(srate as f64, 0).unwrap();
 
     // start taking data until integrate is false
+    {
+      let mut measurements = measurements.lock().await;
+      let measurement = measurements.last_mut().unwrap();
+      measurement.duration = Utc::now().signed_duration_since(measurement.start).to_std().unwrap();
+    }
     let mut n = 0.0;
     while !cancellation_token.is_cancelled() {
         let mut spec = vec![0.0; avg_pts];
@@ -435,6 +447,33 @@ impl Telescope for SalsaTelescope {
             }
             None => TelescopeStatus::Idle,
         };
+        
+        let latest_observation =  {
+            let measurements = self.measurements.lock().await;
+            if measurements.is_empty() {
+                None
+            } else {
+                log::info!("Got here once...");
+                drop(measurements);
+                //let latest_measurement = measurements.iter().cloned().last();
+                let latest_observation = ObservedSpectra {
+                    //frequencies: latest_measurement.freqs.iter().cloned().collect(),
+                    //spectra: latest_measurement.amps.iter().cloned().collect(),
+                    spectra: vec![0.0; 512],
+                    frequencies: vec![0.0; 512],
+                    //observation_time: latest_measurement.duration.clone(),
+                    //observation_time: latest_measurement.duration.clone(),
+                    observation_time: Duration::from_secs(2),
+                };
+            //TODO
+            // If I return None here instead, the program works in the sense that I get the "stop"
+            // integrate button back again, and it will get to this "got here once" loop many
+            // times. But if I return "Some(latest_observation)" it will never get here again, so I
+            // assume it has locked somehow? Why?
+            Some(latest_observation)
+            }
+        };
+
 
         Ok(TelescopeInfo {
             status,
@@ -443,7 +482,7 @@ impl Telescope for SalsaTelescope {
             current_target: self.target,
             most_recent_error: self.most_recent_error.clone(),
             measurement_in_progress: self.active_integration.is_some(),
-            latest_observation: None,
+            latest_observation: latest_observation,
         })
     }
 
@@ -468,12 +507,17 @@ impl Telescope for SalsaTelescope {
             }
         };
 
-        let active_integration = std::mem::replace(&mut self.active_integration, None);
-        if let Some(active_integration) = active_integration {
+        if let Some(active_integration) = &self.active_integration {
             if active_integration.cancellation_token.is_cancelled() {
-                if let Err(error) = active_integration.measurement_task.await {
-                    log::error!("Error while waiting for measurement task: {}", error);
-                }
+                //TODO: Fix so that we ensure the measurment task has completed before we set
+                //active_integration to None. The following does not work as intended
+                //let measurement_task = &active_integration.measurement_task;
+                //if let Err(error) = measurement_task.await {
+                //    log::error!("Error while waiting for measurement task: {}", error);
+                //}
+
+                // Measurement is done
+                std::mem::replace(&mut self.active_integration, None).unwrap();
             }
         }
 

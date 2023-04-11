@@ -39,8 +39,8 @@ pub enum TelescopeStatus {
 
 #[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
 pub struct ObservedSpectra {
-    pub frequencies: Vec<f32>,
-    pub spectra: Vec<f32>,
+    pub frequencies: Vec<f64>,
+    pub spectra: Vec<f64>,
     pub observation_time: Duration,
 }
 
@@ -113,7 +113,8 @@ pub struct Measurement {
     pub freqs: Vec<f64>,
     //glon: f64,
     //glat: f64,
-    //start: DateTime<Utc>,
+    pub start: DateTime<Utc>,
+    pub duration: Duration,
     //stop: Option<DateTime<Utc>>,
     //vlsr_correction: Option<f64>,
     //telname: String,

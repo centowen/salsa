@@ -17,10 +17,10 @@ const FAKE_TELESCOPE_PARKING_HORIZONTAL: Direction = Direction {
 pub const FAKE_TELESCOPE_SLEWING_SPEED: f64 = PI / 10.0;
 pub const LOWEST_ALLOWED_ALTITUDE: f64 = 5.0 / 180. * PI;
 pub const FAKE_TELESCOPE_CHANNELS: usize = 400;
-pub const FAKE_TELESCOPE_CHANNEL_WIDTH: f32 = 2e6f32 / FAKE_TELESCOPE_CHANNELS as f32;
-pub const FAKE_TELESCOPE_FIRST_CHANNEL: f32 =
-    1.420e9f32 - FAKE_TELESCOPE_CHANNEL_WIDTH * FAKE_TELESCOPE_CHANNELS as f32 / 2f32;
-pub const FAKE_TELESCOPE_NOISE: f32 = 2f32;
+pub const FAKE_TELESCOPE_CHANNEL_WIDTH: f64 = 2e6f64 / FAKE_TELESCOPE_CHANNELS as f64;
+pub const FAKE_TELESCOPE_FIRST_CHANNEL: f64 =
+    1.420e9f64 - FAKE_TELESCOPE_CHANNEL_WIDTH * FAKE_TELESCOPE_CHANNELS as f64 / 2f64;
+pub const FAKE_TELESCOPE_NOISE: f64 = 2f64;
 
 pub struct FakeTelescope {
     pub target: TelescopeTarget,
@@ -123,8 +123,8 @@ impl Telescope for FakeTelescope {
             None
         } else {
             let mut latest_observation = ObservedSpectra {
-                frequencies: vec![0f32; FAKE_TELESCOPE_CHANNELS],
-                spectra: vec![0f32; FAKE_TELESCOPE_CHANNELS],
+                frequencies: vec![0f64; FAKE_TELESCOPE_CHANNELS],
+                spectra: vec![0f64; FAKE_TELESCOPE_CHANNELS],
                 observation_time: Duration::from_secs(0),
             };
             for integration in &self.current_spectra {
@@ -140,7 +140,7 @@ impl Telescope for FakeTelescope {
             latest_observation.spectra = latest_observation
                 .spectra
                 .into_iter()
-                .map(|value| value / self.current_spectra.len() as f32)
+                .map(|value| value / self.current_spectra.len() as f64)
                 .collect();
             Some(latest_observation)
         };
@@ -152,7 +152,8 @@ impl Telescope for FakeTelescope {
             current_target: self.target,
             most_recent_error: self.most_recent_error.clone(),
             measurement_in_progress: self.receiver_configuration.integrate,
-            latest_observation,
+            // TODO: fix this
+            latest_observation: None,
         })
     }
 
@@ -195,13 +196,13 @@ impl Telescope for FakeTelescope {
 fn create_fake_spectra(integration_time: Duration) -> ObservedSpectra {
     let mut rng = rand::thread_rng();
 
-    let frequencies: Vec<f32> = (0..FAKE_TELESCOPE_CHANNELS)
-        .map(|channel| channel as f32 * FAKE_TELESCOPE_CHANNEL_WIDTH + FAKE_TELESCOPE_FIRST_CHANNEL)
+    let frequencies: Vec<f64> = (0..FAKE_TELESCOPE_CHANNELS)
+        .map(|channel| channel as f64 * FAKE_TELESCOPE_CHANNEL_WIDTH + FAKE_TELESCOPE_FIRST_CHANNEL)
         .collect();
-    let spectra: Vec<f32> = vec![5f32; FAKE_TELESCOPE_CHANNELS]
+    let spectra: Vec<f64> = vec![5f64; FAKE_TELESCOPE_CHANNELS]
         .into_iter()
         .map(|value| {
-            value + FAKE_TELESCOPE_NOISE * rng.sample::<f32, StandardNormal>(StandardNormal)
+            value + FAKE_TELESCOPE_NOISE * rng.sample::<f64, StandardNormal>(StandardNormal)
         })
         .collect();
 

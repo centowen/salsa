@@ -2326,8 +2326,7 @@ checksum = "9e79c4d996edb816c91e4308506774452e55e95c3c9de07b6729e17e15a5ef81"
 [[package]]
 name = "uhd"
 version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1c59db7ab33a48ed7e40e8bfa26d8a91859e1aa23515fc0e0fb23d7df73fef30"
+source = "git+https://github.com/centowen/uhd-rust.git?branch=remove_enumerate_registers#95b08182087881e4aedb943fa931883bca8d0b05"
 dependencies = [
  "anyhow",
  "libc",
@@ -2339,8 +2338,7 @@ dependencies = [
 [[package]]
 name = "uhd-sys"
 version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "75696e5b0b05e71105a33be6da389009792332faa8b7fa5b3e4a89be40b235d5"
+source = "git+https://github.com/centowen/uhd-rust.git?branch=remove_enumerate_registers#95b08182087881e4aedb943fa931883bca8d0b05"
 dependencies = [
  "bindgen",
  "metadeps",

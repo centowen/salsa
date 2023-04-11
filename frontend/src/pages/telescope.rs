@@ -330,13 +330,13 @@ impl Component for TelescopePage {
                         >
                             {"Stop"}
                         </button>
-                        if let Some(observation) = info.latest_observation.as_ref() {
+                        if let Some(measurement) = info.latest_observation.as_ref() {
                             <div>{format!("Integration time: {}s",
-                                          observation.observation_time.as_secs())}</div>
+                                          measurement.observation_time.as_secs())}</div>
                             <div>
                                 <Graph id="spectra"
-                                       x={observation.frequencies.clone()}
-                                       y={observation.spectra.clone()} />
+                                       x={measurement.frequencies.clone()}
+                                       y={measurement.spectra.clone()} />
                             </div>
                         }
                     } else {
