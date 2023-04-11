@@ -38,7 +38,6 @@ mod handlers {
 
     pub async fn get_bookings(db: DataBase<Vec<Booking>>) -> Result<impl Reply, Rejection> {
         let bookings = db.get_data().await;
-        // TODO: Do I need to clone here instead?
         Ok(warp::reply::json(&*bookings))
     }
 }
