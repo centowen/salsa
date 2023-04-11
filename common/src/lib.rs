@@ -64,7 +64,7 @@ pub enum TelescopeError {
 
 #[derive(Serialize, Deserialize, PartialEq, Debug, Copy, Clone)]
 pub enum ReceiverError {
-    IntegrationAlreadyRunning
+    IntegrationAlreadyRunning,
 }
 
 impl Display for TelescopeError {
@@ -110,7 +110,7 @@ pub struct Booking {
 #[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
 pub struct Measurement {
     pub amps: Vec<f64>,
-    pub freqs : Vec<f64>,
+    pub freqs: Vec<f64>,
     //glon: f64,
     //glat: f64,
     //start: DateTime<Utc>,

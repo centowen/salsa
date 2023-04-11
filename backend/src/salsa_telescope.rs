@@ -3,13 +3,13 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use common::coords::{horizontal_from_equatorial, horizontal_from_galactic};
 use common::{
-    Direction, Location, ReceiverConfiguration, ReceiverError, TelescopeError, TelescopeInfo,
-    TelescopeStatus, TelescopeTarget, Measurement,
+    Direction, Location, Measurement, ReceiverConfiguration, ReceiverError, TelescopeError,
+    TelescopeInfo, TelescopeStatus, TelescopeTarget,
 };
 use hex_literal::hex;
-use tokio_util::sync::CancellationToken;
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
+use tokio_util::sync::CancellationToken;
 
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpStream};
@@ -17,9 +17,8 @@ use std::str::FromStr;
 use std::time::Duration;
 
 use median::Filter;
-use rustfft::{FftPlanner, num_complex::Complex};
+use rustfft::{num_complex::Complex, FftPlanner};
 use uhd::{self, StreamCommand, StreamCommandType, StreamTime, TuneRequest, Usrp};
-
 
 pub const LOWEST_ALLOWED_ALTITUDE: f64 = 5.0f64 / 180.0f64 * std::f64::consts::PI;
 
@@ -202,7 +201,7 @@ fn rot2prog_angle_to_bytes(angle: f64) -> [u8; 5] {
     bytes[4] = (angle % 10.0) as u8 + 0x30;
     bytes
 }
-    
+
 fn measure_switched(
     usrp: &mut Usrp,
     sfreq: f64,
@@ -311,12 +310,18 @@ fn measure_single(
     }
 }
 
-async fn measure(measurements: Arc<Mutex<Vec<Measurement>>>, cancellation_token: tokio_util::sync::CancellationToken) -> () {
+async fn measure(
+    measurements: Arc<Mutex<Vec<Measurement>>>,
+    cancellation_token: tokio_util::sync::CancellationToken,
+) -> () {
     let avg_pts: usize = 512; // ^2 Number of points after average, setting spectral resolution
 
     {
         let mut measurements = measurements.clone().lock_owned().await;
-        let measurement = Measurement{amps: vec![0.0; avg_pts], freqs: vec![0.0; avg_pts]};
+        let measurement = Measurement {
+            amps: vec![0.0; avg_pts],
+            freqs: vec![0.0; avg_pts],
+        };
         measurements.push(measurement);
     }
 
@@ -327,7 +332,7 @@ async fn measure(measurements: Arc<Mutex<Vec<Measurement>>>, cancellation_token:
 
     // Setup usrp for taking data
     let mut usrp = Usrp::open("addr=192.168.5.31").unwrap(); // Brage
-    // The N210 only has one input channel 0.
+                                                             // The N210 only has one input channel 0.
     usrp.set_rx_gain(gain, 0, "").unwrap(); // empty string to set all gains
     usrp.set_rx_antenna("TX/RX", 0).unwrap();
     usrp.set_rx_dc_offset_enabled(true, 0).unwrap();
@@ -339,36 +344,26 @@ async fn measure(measurements: Arc<Mutex<Vec<Measurement>>>, cancellation_token:
     let rfreq: f64 = 1.4179e9;
     usrp.set_rx_sample_rate(srate as f64, 0).unwrap();
 
-
     // start taking data until integrate is false
     let mut n = 0.0;
     while !cancellation_token.is_cancelled() {
         let mut spec = vec![0.0; avg_pts];
         log::info!("Cycle switch measurement...");
         measure_switched(
-            &mut usrp,
-            sfreq,
-            rfreq,
-            fft_pts,
-            tint,
-            avg_pts,
-            srate,
-            &mut spec,
+            &mut usrp, sfreq, rfreq, fft_pts, tint, avg_pts, srate, &mut spec,
         );
         n = n + 1.0;
 
         let mut measurements = measurements.lock().await;
         let measurement = measurements.last_mut().unwrap();
         for i in 0..avg_pts {
-            measurement.amps[i] = (measurement.amps[i]*(n-1.0) + spec[i])/n;
+            measurement.amps[i] = (measurement.amps[i] * (n - 1.0) + spec[i]) / n;
         }
     }
-
 }
 
 #[async_trait]
 impl Telescope for SalsaTelescope {
-    
     async fn get_direction(&self) -> Result<Direction, TelescopeError> {
         let mut stream = create_connection(&self)?;
 
@@ -403,15 +398,17 @@ impl Telescope for SalsaTelescope {
             log::info!("Starting integration");
             self.receiver_configuration.integrate = true;
             let cancellation_token = tokio_util::sync::CancellationToken::new();
-            let measurement_task =
-            {
+            let measurement_task = {
                 let measurements = self.measurements.clone();
                 let cancellation_token = cancellation_token.clone();
-                tokio::spawn(
-                    async move {measure(measurements, cancellation_token).await; }
-                )
+                tokio::spawn(async move {
+                    measure(measurements, cancellation_token).await;
+                })
             };
-            self.active_integration = Some(ActiveIntegration { cancellation_token: cancellation_token, measurement_task: measurement_task });
+            self.active_integration = Some(ActiveIntegration {
+                cancellation_token: cancellation_token,
+                measurement_task: measurement_task,
+            });
         } else if !receiver_configuration.integrate && self.receiver_configuration.integrate {
             log::info!("Stopping integration");
             if let Some(active_integration) = &mut self.active_integration {

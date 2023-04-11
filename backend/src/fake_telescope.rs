@@ -2,8 +2,8 @@ use crate::telescope::Telescope;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use common::{
-    Direction, Location, ObservedSpectra, ReceiverConfiguration, ReceiverError, TelescopeError,
-    TelescopeInfo, TelescopeStatus, TelescopeTarget, Measurement
+    Direction, Location, Measurement, ObservedSpectra, ReceiverConfiguration, ReceiverError,
+    TelescopeError, TelescopeInfo, TelescopeStatus, TelescopeTarget,
 };
 use rand::Rng;
 use rand_distr::StandardNormal;
