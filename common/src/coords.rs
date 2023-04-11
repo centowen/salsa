@@ -16,7 +16,7 @@ const FULL_CIRCLE: f64 = 2.0 * PI;
 // from https://celestrak.org/columns/v02n02/
 // satellite ECI xs,ys,zs in km
 // observer lat,long in radians, alt in km
-fn horizontal_from_sat_eci(
+pub fn horizontal_from_sat_eci(
     xs: f64,
     ys: f64,
     zs: f64,

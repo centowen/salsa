@@ -1,7 +1,6 @@
 use async_trait::async_trait;
 use common::{
-    Direction, Measurement, ReceiverConfiguration, ReceiverError, TelescopeError, TelescopeInfo,
-    TelescopeTarget,
+    Direction, ReceiverConfiguration, ReceiverError, TelescopeError, TelescopeInfo, TelescopeTarget,
 };
 use std::collections::HashMap;
 use std::sync::Arc;

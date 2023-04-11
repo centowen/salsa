@@ -8,7 +8,7 @@ use common::{
 };
 use hex_literal::hex;
 use std::sync::Arc;
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 
 use std::io::{Read, Write};
@@ -97,7 +97,7 @@ impl TelescopeCommand {
 }
 
 pub struct ActiveIntegration {
-    cancellation_token: tokio_util::sync::CancellationToken,
+    cancellation_token: CancellationToken,
     measurement_task: tokio::task::JoinHandle<()>,
 }
 
@@ -310,7 +310,7 @@ fn measure_single(
 
 async fn measure(
     measurements: Arc<Mutex<Vec<Measurement>>>,
-    cancellation_token: tokio_util::sync::CancellationToken,
+    cancellation_token: CancellationToken,
 ) -> () {
     // Switched HI example
     let tint: f64 = 1.0; // integration time per cycle, seconds
@@ -338,7 +338,7 @@ async fn measure(
 
     // Setup usrp for taking data
     let mut usrp = Usrp::open("addr=192.168.5.31").unwrap(); // Brage
-    //let mut usrp = Usrp::open("addr=192.168.5.32").unwrap(); // Vale
+                                                             //let mut usrp = Usrp::open("addr=192.168.5.32").unwrap(); // Vale
 
     // The N210 only has one input channel 0.
     usrp.set_rx_gain(gain, 0, "").unwrap(); // empty string to set all gains
@@ -348,10 +348,6 @@ async fn measure(
     usrp.set_rx_sample_rate(srate as f64, 0).unwrap();
 
     // start taking data until integrate is false
-    {
-        let mut measurements = measurements.lock().await;
-        let measurement = measurements.last_mut().unwrap();
-    }
     let mut n = 0.0;
     while !cancellation_token.is_cancelled() {
         let mut spec = vec![0.0; avg_pts];
@@ -407,7 +403,7 @@ impl Telescope for SalsaTelescope {
 
             log::info!("Starting integration");
             self.receiver_configuration.integrate = true;
-            let cancellation_token = tokio_util::sync::CancellationToken::new();
+            let cancellation_token = CancellationToken::new();
             let measurement_task = {
                 let measurements = self.measurements.clone();
                 let cancellation_token = cancellation_token.clone();
@@ -494,7 +490,7 @@ impl Telescope for SalsaTelescope {
             }
         };
 
-        let mut fulbool = false ;
+        let mut fulbool = false;
         if let Some(active_integration) = &mut self.active_integration {
             if active_integration.cancellation_token.is_cancelled() {
                 let measurement_task = &mut active_integration.measurement_task;
