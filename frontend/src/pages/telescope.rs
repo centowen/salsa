@@ -42,7 +42,9 @@ pub enum TelescopePageReceiverError {
 
 impl From<ReceiverError> for TelescopePageReceiverError {
     fn from(value: ReceiverError) -> Self {
-        match value {}
+        match value {
+            ReceiverError::IntegrationAlreadyRunning => TelescopePageReceiverError::RequestError,
+        }
     }
 }
 

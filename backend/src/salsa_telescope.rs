@@ -402,12 +402,21 @@ impl Telescope for SalsaTelescope {
 
             log::info!("Starting integration");
             self.receiver_configuration.integrate = true;
-            let cancellationToken = tokio_util::sync::CancellationToken::new();
-            let measurement_task = tokio::spawn(async move {measure(self.measurements.clone(), cancellationToken.clone()).await } );
-            self.active_integration = Some(ActiveIntegration { cancellation_token: cancellationToken, measurement_task: measurement_task });
+            let cancellation_token = tokio_util::sync::CancellationToken::new();
+            let measurement_task =
+            {
+                let measurements = self.measurements.clone();
+                let cancellation_token = cancellation_token.clone();
+                tokio::spawn(
+                    async move {measure(measurements, cancellation_token).await; }
+                )
+            };
+            self.active_integration = Some(ActiveIntegration { cancellation_token: cancellation_token, measurement_task: measurement_task });
         } else if !receiver_configuration.integrate && self.receiver_configuration.integrate {
             log::info!("Stopping integration");
-            self.active_integration.unwrap().cancellation_token.cancel();
+            if let Some(active_integration) = &mut self.active_integration {
+                active_integration.cancellation_token.cancel();
+            }
             self.receiver_configuration.integrate = false;
         }
         Ok(self.receiver_configuration)
@@ -462,10 +471,12 @@ impl Telescope for SalsaTelescope {
             }
         };
 
-        if let Some(active_integration) = &self.active_integration {
+        let active_integration = std::mem::replace(&mut self.active_integration, None);
+        if let Some(active_integration) = active_integration {
             if active_integration.cancellation_token.is_cancelled() {
-                active_integration.measurement_task.await;
-                self.active_integration = None;
+                if let Err(error) = active_integration.measurement_task.await {
+                    log::error!("Error while waiting for measurement task: {}", error);
+                }
             }
         }
 
