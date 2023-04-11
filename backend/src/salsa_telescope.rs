@@ -267,7 +267,6 @@ fn measure_single(
         .unwrap();
     receiver.receive_simple(buffer.as_mut()).unwrap();
 
-    log::info!("Doing FFT...");
     // array to store power spectrum (abs of FFT result)
     let mut fft_abs: Vec<f64> = Vec::with_capacity(fft_pts);
     fft_abs.resize(fft_pts, 0.0);
@@ -290,11 +289,10 @@ fn measure_single(
             fft_abs[i] = fft_abs[i] + fft_buffer[i + fft_pts / 2].norm();
         }
     }
-    log::info!("Normalise...");
     // Normalise spectrum by number of stackings,
     // do **2 to get power spectrum, and median filter
     // also lot max/min for plotting
-    let mut filter = Filter::new(21);
+    let mut filter = Filter::new(31);
     for i in 0..fft_pts {
         fft_abs[i] = fft_abs[i] * fft_abs[i] / (nstack as f64);
         fft_abs[i] = filter.consume(fft_abs[i]);
@@ -330,19 +328,17 @@ async fn measure(
             duration: Duration::from_secs(0),
         };
         for i in 0..avg_pts {
-            measurement.freqs[i] = sfreq + srate * ((i/avg_pts) as f64);
+            measurement.freqs[i] = sfreq + srate * (i as f64 / avg_pts as f64);
         }
         measurements.push(measurement);
     }
-
-    log::info!("Starting measurement...");
 
     let fft_pts: usize = 4096; // ^2 Number of points in FFT, setting spectral resolution
     let gain: f64 = 40.0;
 
     // Setup usrp for taking data
-    //let mut usrp = Usrp::open("addr=192.168.5.31").unwrap(); // Brage
-    let mut usrp = Usrp::open("addr=192.168.5.32").unwrap(); // Vale
+    let mut usrp = Usrp::open("addr=192.168.5.31").unwrap(); // Brage
+    //let mut usrp = Usrp::open("addr=192.168.5.32").unwrap(); // Vale
 
     // The N210 only has one input channel 0.
     usrp.set_rx_gain(gain, 0, "").unwrap(); // empty string to set all gains
@@ -353,14 +349,12 @@ async fn measure(
 
     // start taking data until integrate is false
     {
-      let mut measurements = measurements.lock().await;
-      let measurement = measurements.last_mut().unwrap();
-      measurement.duration = Utc::now().signed_duration_since(measurement.start).to_std().unwrap();
+        let mut measurements = measurements.lock().await;
+        let measurement = measurements.last_mut().unwrap();
     }
     let mut n = 0.0;
     while !cancellation_token.is_cancelled() {
         let mut spec = vec![0.0; avg_pts];
-        log::info!("Cycle switch measurement...");
         measure_switched(
             &mut usrp, sfreq, rfreq, fft_pts, tint, avg_pts, srate, &mut spec,
         );
@@ -371,6 +365,10 @@ async fn measure(
         for i in 0..avg_pts {
             measurement.amps[i] = (measurement.amps[i] * (n - 1.0) + spec[i]) / n;
         }
+        measurement.duration = Utc::now()
+            .signed_duration_since(measurement.start)
+            .to_std()
+            .unwrap();
     }
 }
 
@@ -447,33 +445,22 @@ impl Telescope for SalsaTelescope {
             }
             None => TelescopeStatus::Idle,
         };
-        
-        let latest_observation =  {
+
+        let latest_observation = {
             let measurements = self.measurements.lock().await;
-            if measurements.is_empty() {
-                None
-            } else {
-                log::info!("Got here once...");
-                drop(measurements);
-                //let latest_measurement = measurements.iter().cloned().last();
-                let latest_observation = ObservedSpectra {
-                    //frequencies: latest_measurement.freqs.iter().cloned().collect(),
-                    //spectra: latest_measurement.amps.iter().cloned().collect(),
-                    spectra: vec![0.0; 512],
-                    frequencies: vec![0.0; 512],
-                    //observation_time: latest_measurement.duration.clone(),
-                    //observation_time: latest_measurement.duration.clone(),
-                    observation_time: Duration::from_secs(2),
-                };
-            //TODO
-            // If I return None here instead, the program works in the sense that I get the "stop"
-            // integrate button back again, and it will get to this "got here once" loop many
-            // times. But if I return "Some(latest_observation)" it will never get here again, so I
-            // assume it has locked somehow? Why?
-            Some(latest_observation)
+            match measurements.last() {
+                None => None,
+                Some(measurement) => {
+                    let measurement = measurement.clone();
+                    let latest_observation = ObservedSpectra {
+                        frequencies: measurement.freqs,
+                        spectra: measurement.amps,
+                        observation_time: measurement.duration,
+                    };
+                    Some(latest_observation)
+                }
             }
         };
-
 
         Ok(TelescopeInfo {
             status,
@@ -507,18 +494,19 @@ impl Telescope for SalsaTelescope {
             }
         };
 
-        if let Some(active_integration) = &self.active_integration {
+        let mut fulbool = false ;
+        if let Some(active_integration) = &mut self.active_integration {
             if active_integration.cancellation_token.is_cancelled() {
-                //TODO: Fix so that we ensure the measurment task has completed before we set
-                //active_integration to None. The following does not work as intended
-                //let measurement_task = &active_integration.measurement_task;
-                //if let Err(error) = measurement_task.await {
-                //    log::error!("Error while waiting for measurement task: {}", error);
-                //}
-
-                // Measurement is done
-                std::mem::replace(&mut self.active_integration, None).unwrap();
+                let measurement_task = &mut active_integration.measurement_task;
+                if let Err(error) = measurement_task.await {
+                    log::error!("Error while waiting for measurement task: {}", error);
+                }
+                fulbool = true;
             }
+        }
+        if fulbool {
+            // Measurement is done
+            self.active_integration = None;
         }
 
         //log::info!("Updating telescope");

@@ -49,7 +49,7 @@ async fn main() {
             Arc::new(Mutex::new(salsa_telescope::create(
                 //"192.168.5.12:23".to_string(), // torre
                 "192.168.5.10:23".to_string(), // brage
-                //"192.168.5.11:23".to_string(), // vale
+                                               //"192.168.5.11:23".to_string(), // vale
             ))),
         );
     }

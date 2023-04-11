@@ -147,12 +147,12 @@ pub fn main() -> Result<()> {
     usrp.set_rx_dc_offset_enabled(true, 0)?;
 
     // Switched HI example
-    let tint: f64 = 64.0; // integration time, seconds
+    let tint: f64 = 4.0; // integration time, seconds
     let srate: f64 = 2.5e6; // sample rate, Hz
     let sfreq: f64 = 1.4204e9;
     let rfreq: f64 = 1.4179e9;
     usrp.set_rx_sample_rate(srate as f64, 0)?;
-    let tcyc: usize = 4; // time per integration cycle
+    let tcyc: usize = 1; // time per integration cycle
     let ncyc = (tint as usize) / (tcyc);
     let rest = tint % (tcyc as f64);
     let mut spec = Vec::with_capacity(avg_pts);
@@ -205,6 +205,7 @@ pub fn main() -> Result<()> {
     }
 
     log::info!("Plot...");
+    log::info!("ymax {} ymin {}", ymax, ymin);
     //let mut freqs: [f64; fft_pts] = [0.0; fft_pts];
     let root_area = BitMapBackend::new("plot.png", (800, 600)).into_drawing_area();
     root_area.fill(&WHITE).unwrap();
