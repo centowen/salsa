@@ -152,8 +152,7 @@ impl Telescope for FakeTelescope {
             current_target: self.target,
             most_recent_error: self.most_recent_error.clone(),
             measurement_in_progress: self.receiver_configuration.integrate,
-            // TODO: fix this
-            latest_observation: None,
+            latest_observation: latest_observation,
         })
     }
 
@@ -179,6 +178,7 @@ impl Telescope for FakeTelescope {
         }
 
         if self.receiver_configuration.integrate {
+            log::info!("Pushing spectum...");
             self.current_spectra.push(create_fake_spectra(delta_time))
         }
 
