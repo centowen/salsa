@@ -43,7 +43,7 @@ fn draw_graph<DB: DrawingBackend>(
         return Err(DrawError::IncorrectInputData);
     }
     // scale data for plotting
-    let x : Vec<f64> = x.iter().map(|a| a/1.0e6).collect();
+    let x: Vec<f64> = x.iter().map(|a| a / 1.0e6).collect();
 
     let root = backend.into_drawing_area();
     root.fill(&WHITE).map_err(|_| DrawError::PlotterError)?;
