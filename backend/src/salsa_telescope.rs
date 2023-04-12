@@ -515,12 +515,14 @@ impl Telescope for SalsaTelescope {
             }
         };
 
-        if self.active_integration.is_some() && self
+        if self.active_integration.is_some()
+            && self
                 .active_integration
                 .as_ref()
                 .unwrap()
                 .cancellation_token
-                .is_cancelled() {
+                .is_cancelled()
+        {
             if let Err(error) =
                 (&mut self.active_integration.as_mut().unwrap().measurement_task).await
             {
