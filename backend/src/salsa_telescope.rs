@@ -505,7 +505,6 @@ impl Telescope for SalsaTelescope {
             }
         }
 
-        //log::info!("Connecting to telescope");
         let stream = create_connection(&self);
         let mut stream = match stream {
             Ok(stream) => stream,
@@ -531,7 +530,6 @@ impl Telescope for SalsaTelescope {
             self.active_integration = None;
         }
 
-        //log::info!("Updating telescope");
         self.update_direction(now, &mut stream).await?;
         Ok(())
     }
