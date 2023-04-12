@@ -552,7 +552,7 @@ fn directions_are_close(a: Direction, b: Direction, tol: f64) -> bool {
     // but to report tracking status we allow more, so that we do not flip
     // status between tracking/slewing (e.g. due to control unit rounding errors)
     // Therefore we have the "tol" multiplier here, which scales the allowed error.
-    let epsilon = tol*0.1_f64.to_radians();
+    let epsilon = tol * 0.1_f64.to_radians();
     (a.azimuth - b.azimuth).abs() < epsilon && (a.altitude - b.altitude).abs() < epsilon
 }
 
@@ -613,7 +613,7 @@ impl SalsaTelescope {
                 }
 
                 self.commanded_horizontal = Some(target_horizontal);
-                 
+
                 // Check if more than 1 tolerance off, if so we need to send track command
                 if !directions_are_close(target_horizontal, current_horizontal, 1.0) {
                     send_command(stream, TelescopeCommand::SetDirection(target_horizontal))?;
