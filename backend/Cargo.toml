@@ -23,7 +23,6 @@ tokio-util = { version = "0.7.7" }
 hex-literal = { version="0.3.4" }
 warp = { version = "0.3.3" }
 uhd= { git="https://github.com/centowen/uhd-rust.git", branch="remove_enumerate_registers" }
-median = "0.3.2"
 rustfft="*"
 
 [dev-dependencies]
