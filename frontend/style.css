@@ -5,12 +5,12 @@ a {
 .telescope-receiver {
     border: 1px solid black;
     margin: 4px;
-    width: 1000px;
-    height: 500px;
+    width: 100%;
+    height: 100%;
 }
 
 .telescope-target-control {
     border: 1px solid black;
     margin: 4px;
-    width: 1000px;
+    width: 100%;
 }
