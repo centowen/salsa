@@ -47,14 +47,10 @@ fn draw_graph<DB: DrawingBackend>(
     root.fill(&WHITE).map_err(|_| DrawError::PlotterError)?;
     let x_min = *x.first().expect("x should not be empty");
     let x_max = *x.last().expect("x should not be empty");
-    // let y_min = y.iter().fold(f32::INFINITY, |a, &b| a.min(b)).min(0f32);
-    // let y_max = 1.2 * y.iter().fold(-f32::INFINITY, |a, &b| a.max(b));
     let y_min = y.iter().fold(f64::INFINITY, |a, &b| a.min(b));
     let y_max = y.iter().fold(-f64::INFINITY, |a, &b| a.max(b));
     log::info!("xmin {}, xmax {}", x_min, x_max);
     log::info!("ymin {}, ymax {}", y_min, y_max);
-    //let y_min = 0.0 ;
-    //let y_max = 10.0;
 
     let mut chart = ChartBuilder::on(&root)
         .margin(20u32)
