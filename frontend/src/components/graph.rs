@@ -42,30 +42,31 @@ fn draw_graph<DB: DrawingBackend>(
     if x.len() != y.len() || x.is_empty() || y.is_empty() {
         return Err(DrawError::IncorrectInputData);
     }
+    // scale data for plotting
+    let x : Vec<f64> = x.iter().map(|a| a/1.0e6).collect();
 
     let root = backend.into_drawing_area();
     root.fill(&WHITE).map_err(|_| DrawError::PlotterError)?;
     let x_min = *x.first().expect("x should not be empty");
     let x_max = *x.last().expect("x should not be empty");
-    // let y_min = y.iter().fold(f32::INFINITY, |a, &b| a.min(b)).min(0f32);
-    // let y_max = 1.2 * y.iter().fold(-f32::INFINITY, |a, &b| a.max(b));
     let y_min = y.iter().fold(f64::INFINITY, |a, &b| a.min(b));
     let y_max = y.iter().fold(-f64::INFINITY, |a, &b| a.max(b));
     log::info!("xmin {}, xmax {}", x_min, x_max);
     log::info!("ymin {}, ymax {}", y_min, y_max);
-    //let y_min = 0.0 ;
-    //let y_max = 10.0;
 
     let mut chart = ChartBuilder::on(&root)
-        .margin(20u32)
-        .x_label_area_size(30u32)
-        .y_label_area_size(30u32)
+        .margin(10)
+        .x_label_area_size(50)
+        .y_label_area_size(60)
         .build_cartesian_2d(x_min..x_max, y_min..y_max)
         .map_err(|_| DrawError::PlotterError)?;
     chart
         .configure_mesh()
-        .x_labels(3)
-        .y_labels(3)
+        .x_labels(5)
+        .y_labels(5)
+        .x_desc("Frequency [MHz]")
+        .y_desc("Intensity")
+        .axis_desc_style(("sans-serif", 15))
         .draw()
         .map_err(|_| DrawError::PlotterError)?;
     chart
@@ -114,7 +115,7 @@ impl Component for Graph {
         }
 
         html! {
-            <canvas width="600" height="400" id={ctx.props().id.clone()} />
+            <canvas width="400" height="300" id={ctx.props().id.clone()} />
         }
     }
 }

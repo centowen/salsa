@@ -16,7 +16,6 @@ use std::net::{SocketAddr, TcpStream};
 use std::str::FromStr;
 use std::time::Duration;
 
-use median::Filter;
 use rustfft::{num_complex::Complex, FftPlanner};
 use uhd::{self, StreamCommand, StreamCommandType, StreamTime, TuneRequest, Usrp};
 
@@ -232,8 +231,11 @@ fn measure_switched(
         srate,
         &mut spec_ref,
     );
+    // Form sig-ref difference and scale with Tsys
+    // Hard coded Tsys for now
+    let tsys = 285.0;
     for i in 0..avg_pts {
-        spec[i] = spec[i] + (0.5 * (spec_sig[i] - spec_ref[i]));
+        spec[i] = tsys * (spec_sig[i] - spec_ref[i]) / spec_ref[i];
     }
 }
 
@@ -273,7 +275,7 @@ fn measure_single(
     // setup fft
     let mut planner = FftPlanner::new();
     let fft = planner.plan_fft_forward(fft_pts);
-    // Loop through the samples, taking FFF_POINTS each time
+    // Loop through the samples, taking fft_pts each time
     for n in 0..nstack {
         let mut fft_buffer: Vec<Complex<f64>> = buffer[n * fft_pts..(n + 1) * fft_pts]
             .iter()
@@ -284,18 +286,31 @@ fn measure_single(
         fft.process(&mut fft_buffer);
         // Add absolute values to stacked spectrum
         // Seems the pos/neg halves of spectrum are flipped, so reflip them
+        // we want lowest frequency in element 0 and then increasing
         for i in 0..fft_pts / 2 {
             fft_abs[i + fft_pts / 2] = fft_abs[i + fft_pts / 2] + fft_buffer[i].norm();
             fft_abs[i] = fft_abs[i] + fft_buffer[i + fft_pts / 2].norm();
         }
     }
     // Normalise spectrum by number of stackings,
-    // do **2 to get power spectrum, and median filter
-    // also lot max/min for plotting
-    let mut filter = Filter::new(31);
+    // do **2 to get power spectrum
     for i in 0..fft_pts {
         fft_abs[i] = fft_abs[i] * fft_abs[i] / (nstack as f64);
-        fft_abs[i] = filter.consume(fft_abs[i]);
+    }
+
+    // median window filter data
+    let mwkernel = 32; //median window filter size, power of 2
+    let threshold = 0.1; // thershold where to cut data and replace with median
+    let nchunks = fft_pts / mwkernel;
+    for i in 0..nchunks {
+        let chunk = &mut fft_abs[i * mwkernel..(i + 1) * mwkernel];
+        let m = median(chunk.to_vec());
+        for n in 0..mwkernel {
+            let diff = (chunk[n] - m).abs();
+            if diff > threshold * m {
+                chunk[n] = m;
+            }
+        }
     }
 
     // Average spectrum to save data
@@ -305,6 +320,17 @@ fn measure_single(
             avg = avg + fft_abs[j];
         }
         fft_avg.push(avg / (navg as f64));
+    }
+}
+
+fn median(mut xs: Vec<f64>) -> f64 {
+    // sort in ascending order, panic on f64::NaN
+    xs.sort_by(|x, y| x.partial_cmp(y).unwrap());
+    let n = xs.len();
+    if n % 2 == 0 {
+        (xs[n / 2] + xs[n / 2 - 1]) / 2.0
+    } else {
+        xs[n / 2]
     }
 }
 
@@ -318,6 +344,19 @@ async fn measure(
     let sfreq: f64 = 1.4204e9;
     let rfreq: f64 = 1.4179e9;
     let avg_pts: usize = 512; // ^2 Number of points after average, setting spectral resolution
+    let fft_pts: usize = 8192; // ^2 Number of points in FFT, setting spectral resolution
+    let gain: f64 = 38.0;
+
+    // Setup usrp for taking data
+    let mut usrp = Usrp::open("addr=192.168.5.31").unwrap(); // Brage
+                                                             //let mut usrp = Usrp::open("addr=192.168.5.32").unwrap(); // Vale
+
+    // The N210 only has one input channel 0.
+    usrp.set_rx_gain(gain, 0, "").unwrap(); // empty string to set all gains
+    usrp.set_rx_antenna("TX/RX", 0).unwrap();
+    usrp.set_rx_dc_offset_enabled(true, 0).unwrap();
+
+    usrp.set_rx_sample_rate(srate as f64, 0).unwrap();
 
     {
         let mut measurements = measurements.clone().lock_owned().await;
@@ -332,20 +371,6 @@ async fn measure(
         }
         measurements.push(measurement);
     }
-
-    let fft_pts: usize = 4096; // ^2 Number of points in FFT, setting spectral resolution
-    let gain: f64 = 40.0;
-
-    // Setup usrp for taking data
-    let mut usrp = Usrp::open("addr=192.168.5.31").unwrap(); // Brage
-                                                             //let mut usrp = Usrp::open("addr=192.168.5.32").unwrap(); // Vale
-
-    // The N210 only has one input channel 0.
-    usrp.set_rx_gain(gain, 0, "").unwrap(); // empty string to set all gains
-    usrp.set_rx_antenna("TX/RX", 0).unwrap();
-    usrp.set_rx_dc_offset_enabled(true, 0).unwrap();
-
-    usrp.set_rx_sample_rate(srate as f64, 0).unwrap();
 
     // start taking data until integrate is false
     let mut n = 0.0;

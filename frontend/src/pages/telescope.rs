@@ -75,7 +75,7 @@ impl Component for TelescopePage {
     fn create(ctx: &Context<Self>) -> Self {
         let info_cb = ctx.link().callback(Message::UpdateInfo);
         let endpoint = format!("/api/telescope/{}", &ctx.props().id);
-        emit_info(info_cb, endpoint, Duration::from_millis(1000));
+        emit_info(info_cb, endpoint, Duration::from_millis(200));
         Self {
             configured_target: TelescopeTarget::Parked,
             tracking_configured: false,
