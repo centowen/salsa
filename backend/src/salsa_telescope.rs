@@ -523,11 +523,8 @@ impl Telescope for SalsaTelescope {
                 .cancellation_token
                 .is_cancelled()
             {
-                {
-                    let foo = &mut self.active_integration.as_mut().unwrap().measurement_task;
-                    if let Err(error) = foo.await {
-                        log::error!("Error while waiting for measurement task: {}", error);
-                    }
+                if let Err(error) = (&mut self.active_integration.as_mut().unwrap().measurement_task).await {
+                    log::error!("Error while waiting for measurement task: {}", error);
                 }
                 self.active_integration = None;
             }
