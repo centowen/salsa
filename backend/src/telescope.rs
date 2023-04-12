@@ -7,7 +7,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{Mutex, RwLock};
 
-pub const TELESCOPE_UPDATE_INTERVAL: Duration = Duration::from_secs(2);
+pub const TELESCOPE_UPDATE_INTERVAL: Duration = Duration::from_secs(1);
 
 #[async_trait]
 pub trait Telescope: Send + Sync {
