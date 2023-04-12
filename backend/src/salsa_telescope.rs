@@ -231,11 +231,13 @@ fn measure_switched(
         srate,
         &mut spec_ref,
     );
+
     // Form sig-ref difference and scale with Tsys
     // Hard coded Tsys for now
     let tsys = 285.0;
     for i in 0..avg_pts {
         spec[i] = tsys * (spec_sig[i] - spec_ref[i]) / spec_ref[i];
+
     }
 }
 
@@ -275,6 +277,7 @@ fn measure_single(
     // setup fft
     let mut planner = FftPlanner::new();
     let fft = planner.plan_fft_forward(fft_pts);
+
     // Loop through the samples, taking fft_pts each time
     for n in 0..nstack {
         let mut fft_buffer: Vec<Complex<f64>> = buffer[n * fft_pts..(n + 1) * fft_pts]
