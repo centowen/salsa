@@ -515,19 +515,22 @@ impl Telescope for SalsaTelescope {
             }
         };
 
-        let mut fulbool = false;
-        if let Some(active_integration) = &mut self.active_integration {
-            if active_integration.cancellation_token.is_cancelled() {
-                let measurement_task = &mut active_integration.measurement_task;
-                if let Err(error) = measurement_task.await {
-                    log::error!("Error while waiting for measurement task: {}", error);
+        if self.active_integration.is_some() {
+            if self
+                .active_integration
+                .as_ref()
+                .unwrap()
+                .cancellation_token
+                .is_cancelled()
+            {
+                {
+                    let foo = &mut self.active_integration.as_mut().unwrap().measurement_task;
+                    if let Err(error) = foo.await {
+                        log::error!("Error while waiting for measurement task: {}", error);
+                    }
                 }
-                fulbool = true;
+                self.active_integration = None;
             }
-        }
-        if fulbool {
-            // Measurement is done
-            self.active_integration = None;
         }
 
         self.update_direction(now, &mut stream).await?;
