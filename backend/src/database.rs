@@ -5,7 +5,7 @@ use std::io::Write;
 use std::sync::Arc;
 use thiserror::Error;
 use tokio::fs;
-use tokio::sync::{RwLock, RwLockReadGuard};
+use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 #[derive(Debug, Error)]
 pub enum DataBaseError {
@@ -102,6 +102,32 @@ where
         self.cache.read().await
     }
 
+    /// Locks the database for writing and runs the supplied function on the
+    /// data.
+    ///
+    /// The function has mutable access to the data. After it returns, any
+    /// changes made to data are written to the database file (if any).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use backend::database::DataBase;
+    ///
+    /// let mut db = DataBase::<Vec<i32>>::from_data(vec![]);
+    /// db.update_data(|mut v| v.push(42)).await.unwrap();
+    /// assert_eq!(*db.get_data().await, vec![42])
+    /// ```
+    pub async fn update_data<F>(&mut self, f: F) -> Result<(), DataBaseError>
+    where
+        F: FnOnce(RwLockWriteGuard<T>),
+    {
+        {
+            f(self.cache.write().await);
+        }
+        self.write_to_file(&*self.cache.read().await).await?;
+        Ok(())
+    }
+
     /// Locks the database for writing and sets its contents.
     ///
     /// # Examples
@@ -109,15 +135,20 @@ where
     /// ```
     /// use backend::database::DataBase;
     ///
-    /// let db = DataBase::<Vec<i32>>::from_data(vec![]);
+    /// let mut db = DataBase::<Vec<i32>>::from_data(vec![]);
     /// db.set_data(vec![42]).await.unwrap();
     /// ```
     pub async fn set_data(&mut self, data: T) -> Result<(), DataBaseError> {
         let mut cache = self.cache.write().await;
-        if let Some(filename) = &self.filename {
-            fs::write(&filename, serde_json::to_string_pretty(&data)?).await?;
-        }
+        self.write_to_file(&data).await?;
         *cache = data;
+        Ok(())
+    }
+
+    async fn write_to_file(&self, data: &T) -> Result<(), DataBaseError> {
+        if let Some(filename) = &self.filename {
+            fs::write(&filename, serde_json::to_string_pretty(data)?).await?;
+        }
         Ok(())
     }
 }
@@ -129,6 +160,16 @@ mod test {
     #[tokio::test]
     async fn test_get_data() {
         let db = DataBase::<Vec<i32>>::from_data(vec![42]);
+        let data = db.get_data().await;
+        assert_eq!(*data, vec![42])
+    }
+
+    #[tokio::test]
+    async fn test_update_data() {
+        let mut db = DataBase::<Vec<i32>>::from_data(vec![]);
+        db.update_data(|mut v| v.push(42))
+            .await
+            .expect("should be able to update db data.");
         let data = db.get_data().await;
         assert_eq!(*data, vec![42])
     }
