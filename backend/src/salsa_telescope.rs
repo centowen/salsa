@@ -458,7 +458,8 @@ impl Telescope for SalsaTelescope {
 
         let status = match self.commanded_horizontal {
             Some(commanded_direction) => {
-                if directions_are_close(commanded_direction, current_horizontal) {
+                // Check if more than 2 tolerances off, if so we are not tracking anymore
+                if directions_are_close(commanded_direction, current_horizontal, 2.0) {
                     TelescopeStatus::Tracking
                 } else {
                     TelescopeStatus::Slewing
@@ -545,9 +546,13 @@ impl Telescope for SalsaTelescope {
     }
 }
 
-fn directions_are_close(a: Direction, b: Direction) -> bool {
+fn directions_are_close(a: Direction, b: Direction, tol: f64) -> bool {
     // The salsa telescope works with a precision of 0.1 degrees
-    let epsilon = 0.1_f64.to_radians();
+    // We want to send new commands whenever we exceed this tolerance
+    // but to report tracking status we allow more, so that we do not flip
+    // status between tracking/slewing (e.g. due to control unit rounding errors)
+    // Therefore we have the "tol" multiplier here, which scales the allowed error.
+    let epsilon = tol*0.1_f64.to_radians();
     (a.azimuth - b.azimuth).abs() < epsilon && (a.altitude - b.altitude).abs() < epsilon
 }
 
@@ -608,8 +613,9 @@ impl SalsaTelescope {
                 }
 
                 self.commanded_horizontal = Some(target_horizontal);
-
-                if !directions_are_close(target_horizontal, current_horizontal) {
+                 
+                // Check if more than 1 tolerance off, if so we need to send track command
+                if !directions_are_close(target_horizontal, current_horizontal, 1.0) {
                     send_command(stream, TelescopeCommand::SetDirection(target_horizontal))?;
                 }
 
