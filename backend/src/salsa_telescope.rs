@@ -505,7 +505,6 @@ impl Telescope for SalsaTelescope {
             }
         }
 
-        //log::info!("Connecting to telescope");
         let stream = create_connection(&self);
         let mut stream = match stream {
             Ok(stream) => stream,
@@ -516,22 +515,22 @@ impl Telescope for SalsaTelescope {
             }
         };
 
-        let mut fulbool = false;
-        if let Some(active_integration) = &mut self.active_integration {
-            if active_integration.cancellation_token.is_cancelled() {
-                let measurement_task = &mut active_integration.measurement_task;
-                if let Err(error) = measurement_task.await {
-                    log::error!("Error while waiting for measurement task: {}", error);
-                }
-                fulbool = true;
+        if self.active_integration.is_some()
+            && self
+                .active_integration
+                .as_ref()
+                .unwrap()
+                .cancellation_token
+                .is_cancelled()
+        {
+            if let Err(error) =
+                (&mut self.active_integration.as_mut().unwrap().measurement_task).await
+            {
+                log::error!("Error while waiting for measurement task: {}", error);
             }
-        }
-        if fulbool {
-            // Measurement is done
             self.active_integration = None;
         }
 
-        //log::info!("Updating telescope");
         self.update_direction(now, &mut stream).await?;
         Ok(())
     }
