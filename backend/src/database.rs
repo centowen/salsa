@@ -1,11 +1,13 @@
+use async_trait::async_trait;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
+use std::collections::HashMap;
 use std::io;
-use std::io::Write;
 use std::sync::Arc;
 use thiserror::Error;
 use tokio::fs;
-use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::sync::RwLock;
 
 #[derive(Debug, Error)]
 pub enum DataBaseError {
@@ -21,85 +23,152 @@ pub enum DataBaseError {
     },
 }
 
-#[derive(Debug, Clone)]
-pub struct DataBase<T> {
-    cache: Arc<RwLock<T>>,
-    filename: Option<String>,
+#[async_trait]
+pub trait Storage: Sized + Clone + Send + Sync {
+    type StorageConfiguration: Clone + Send + Sync;
+
+    async fn create(
+        configuration: &Self::StorageConfiguration,
+        key: &str,
+        data: &[u8],
+    ) -> Result<Self, DataBaseError>;
+    async fn read(&self) -> Result<Vec<u8>, DataBaseError>;
+    async fn write(&mut self, data: &[u8]) -> Result<(), DataBaseError>;
 }
 
-impl<T> DataBase<T>
+#[derive(Debug, Clone)]
+pub struct InMemoryStorage {
+    data: Vec<u8>,
+}
+
+#[async_trait]
+impl Storage for InMemoryStorage {
+    type StorageConfiguration = ();
+
+    async fn create(
+        _configuration: &Self::StorageConfiguration,
+        _key: &str,
+        data: &[u8],
+    ) -> Result<Self, DataBaseError> {
+        Ok(Self { data: data.into() })
+    }
+
+    async fn read(&self) -> Result<Vec<u8>, DataBaseError> {
+        Ok(self.data.clone())
+    }
+
+    async fn write(&mut self, data: &[u8]) -> Result<(), DataBaseError> {
+        self.data = data.into();
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct FileStorage {
+    path: std::path::PathBuf,
+}
+
+#[derive(Debug, Clone)]
+pub struct FileStorageConfiguration {
+    path: std::path::PathBuf,
+}
+
+#[async_trait]
+impl Storage for FileStorage {
+    type StorageConfiguration = FileStorageConfiguration;
+
+    async fn create(
+        configuration: &Self::StorageConfiguration,
+        key: &str,
+        data: &[u8],
+    ) -> Result<Self, DataBaseError> {
+        let path = configuration.path.join(format!("{}.json", key));
+        let mut file = fs::File::create(&path).await?;
+        file.write_all(&data).await?;
+        Ok(Self { path })
+    }
+
+    async fn read(&self) -> Result<Vec<u8>, DataBaseError> {
+        let mut file = fs::File::open(&self.path).await?;
+        let mut data = Vec::new();
+        file.read_to_end(&mut data).await?;
+        Ok(data)
+    }
+
+    async fn write(&mut self, data: &[u8]) -> Result<(), DataBaseError> {
+        let mut file = fs::File::create(&self.path).await?;
+        file.write_all(data).await?;
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct DataBase<StorageType>
 where
-    T: DeserializeOwned + Serialize + Default,
+    StorageType: Storage,
 {
-    /// Create an in-memory database.
-    ///
-    /// Changes to the data in the returned database are never written to any
-    /// file.
-    pub fn from_data(data: T) -> Self {
-        Self {
-            cache: Arc::new(RwLock::new(data)),
-            filename: None,
-        }
+    storage: Arc<RwLock<HashMap<&'static str, StorageType>>>,
+    storage_configuration: StorageType::StorageConfiguration,
+}
+
+/// Create an in-memory database.
+///
+/// Changes to the data in the returned database are never written to any
+/// file.
+pub fn create_in_memory_database() -> DataBase<InMemoryStorage> {
+    DataBase::<InMemoryStorage> {
+        storage: Arc::new(RwLock::new(HashMap::new())),
+        storage_configuration: (),
+    }
+}
+
+/// Create a database with the contents of the directory at `directory`.
+///
+/// The database support multiple keys with each key having its own file.
+pub async fn create_database_from_directory(
+    directory: &str,
+) -> Result<DataBase<FileStorage>, DataBaseError> {
+    if !fs::try_exists(directory).await? {
+        fs::create_dir(directory).await?;
     }
 
-    /// Create a database with the contents of the file at `filename`.
-    ///
-    /// If the file doesn't exist an attempt is made to create it with the
-    /// `T::default()` as contents.
-    ///
-    /// Any changes to the data in the database (using e.g.
-    /// [`DataBase::set_data`]) are automatically written to the file.
-    ///
-    /// # Errors
-    ///
-    /// This function can return an `Err` for a number of reasons.
-    ///
-    /// - if the file exists but can not be read for any reason,
-    /// - if the contents of the file can not be deserialized into type `T`, or
-    ///   if `T::default()` can not be serialized,
-    /// - if the file doesn't exist and can't be created.
-    pub async fn from_file(filename: &str) -> Result<Self, DataBaseError> {
-        let data = match fs::read_to_string(filename).await {
-            Ok(serialized_data) => serde_json::from_str::<T>(&serialized_data)?,
-            Err(error) => {
-                if matches!(error.kind(), io::ErrorKind::NotFound) {
-                    let data = T::default();
-                    let mut file = std::fs::OpenOptions::new()
-                        .create_new(true)
-                        .write(true)
-                        .open(filename)?;
-                    file.write(serde_json::to_string_pretty(&data)?.as_bytes())?;
-                    data
-                } else {
-                    Err(error)?
-                }
-            }
-        };
-        Ok(Self {
-            cache: Arc::new(RwLock::new(data)),
-            filename: Some(filename.to_string()),
-        })
-    }
+    Ok(DataBase::<FileStorage> {
+        storage: Arc::new(RwLock::new(HashMap::new())),
+        storage_configuration: FileStorageConfiguration {
+            path: std::path::Path::new(directory).to_owned(),
+        },
+    })
+}
 
+impl<StorageType> DataBase<StorageType>
+where
+    StorageType: Storage,
+{
     /// Locks the database for reading and returns its contents.
-    ///
-    /// The returned value is an guard implementing [`Deref`](std::ops::Deref)
-    /// into the contained data. The database is locked for reading while the
-    /// returned guard is alive.
+    /// If no data is found, the default value is returned.
     ///
     /// # Examples
     ///
     /// ```
     /// use backend::database::DataBase;
     ///
-    /// let db = DataBase::<Vec<i32>>::from_data(vec![42]);
-    /// {
-    ///     let data = db.get_data().await;
-    ///     assert_eq!(*data, vec![42])
-    /// } // <-- read lock released here
+    /// let db = DataBase::create_in_memory();
+    /// let data = db.set_data::<Vec<i32>("numbers", vec![42]).await;
+    /// let data = db.get_data::<Vec<i32>("numbers").await;
+    /// assert_eq!(data, vec![42])
     /// ```
-    pub async fn get_data(&self) -> RwLockReadGuard<T> {
-        self.cache.read().await
+    pub async fn get_data<T>(&self, key: &'static str) -> Result<T, DataBaseError>
+    where
+        T: DeserializeOwned + Serialize + Default,
+    {
+        let storages = self.storage.read().await;
+        match storages.get(key) {
+            Some(storage) => {
+                let data = storage.read().await?;
+                Ok(serde_json::from_slice(&data)?)
+            }
+            None => Ok(T::default()),
+        }
     }
 
     /// Locks the database for writing and runs the supplied function on the
@@ -113,74 +182,74 @@ where
     /// ```
     /// use backend::database::DataBase;
     ///
-    /// let mut db = DataBase::<Vec<i32>>::from_data(vec![]);
-    /// db.update_data(|mut v| v.push(42)).await.unwrap();
-    /// assert_eq!(*db.get_data().await, vec![42])
+    /// let db = create_in_memory_database();
+    /// db.update_data::<Vec<i32>>("numbers", |mut v| v.push(42)).await.unwrap();
+    /// assert_eq!(db.get_data::<Vec<i32>>("numbers").await, vec![42])
     /// ```
-    pub async fn update_data<F>(&mut self, f: F) -> Result<(), DataBaseError>
+    pub async fn update_data<T, F>(&self, key: &'static str, f: F) -> Result<(), DataBaseError>
     where
-        F: FnOnce(RwLockWriteGuard<T>),
+        T: DeserializeOwned + Serialize + Default,
+        F: FnOnce(T) -> T,
     {
-        {
-            f(self.cache.write().await);
-        }
-        self.write_to_file(&*self.cache.read().await).await?;
-        Ok(())
-    }
+        let mut storages = self.storage.write().await;
 
-    /// Locks the database for writing and sets its contents.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use backend::database::DataBase;
-    ///
-    /// let mut db = DataBase::<Vec<i32>>::from_data(vec![]);
-    /// db.set_data(vec![42]).await.unwrap();
-    /// ```
-    pub async fn set_data(&mut self, data: T) -> Result<(), DataBaseError> {
-        let mut cache = self.cache.write().await;
-        self.write_to_file(&data).await?;
-        *cache = data;
-        Ok(())
-    }
+        match storages.get_mut(key) {
+            Some(storage) => {
+                let data = storage.read().await?;
+                let value = serde_json::from_slice(&data)?;
+                let value = f(value);
+                let data = serde_json::to_vec(&value)?;
+                storage.write(&data).await?;
+            }
+            None => {
+                let value = T::default();
+                let value = f(value);
+                let data = serde_json::to_vec(&value)?;
 
-    async fn write_to_file(&self, data: &T) -> Result<(), DataBaseError> {
-        if let Some(filename) = &self.filename {
-            fs::write(&filename, serde_json::to_string_pretty(data)?).await?;
-        }
+                storages.insert(
+                    key,
+                    StorageType::create(&self.storage_configuration, key, &data).await?,
+                );
+            }
+        };
+
         Ok(())
     }
 }
 
 #[cfg(test)]
 mod test {
-    use super::DataBase;
+    use super::*;
 
     #[tokio::test]
     async fn test_get_data() {
-        let db = DataBase::<Vec<i32>>::from_data(vec![42]);
-        let data = db.get_data().await;
-        assert_eq!(*data, vec![42])
+        let db = create_in_memory_database();
+        db.update_data("numbers", |mut numbers: Vec<i32>| {
+            numbers.push(42);
+            numbers
+        })
+        .await
+        .expect("msshould be able to set db data");
+        let data = db
+            .get_data::<Vec<i32>>("numbers")
+            .await
+            .expect("should be able to get db data");
+        assert_eq!(data, vec![42])
     }
 
     #[tokio::test]
     async fn test_update_data() {
-        let mut db = DataBase::<Vec<i32>>::from_data(vec![]);
-        db.update_data(|mut v| v.push(42))
+        let db = create_in_memory_database();
+        db.update_data::<Vec<i32>, _>("numbers", |mut v| {
+            v.push(42);
+            v
+        })
+        .await
+        .expect("should be able to update db data");
+        let data = db
+            .get_data::<Vec<i32>>("numbers")
             .await
-            .expect("should be able to update db data.");
-        let data = db.get_data().await;
-        assert_eq!(*data, vec![42])
-    }
-
-    #[tokio::test]
-    async fn test_set_data() {
-        let mut db = DataBase::<Vec<i32>>::from_data(vec![]);
-        db.set_data(vec![42])
-            .await
-            .expect("should be able to set db data.");
-        let data = db.get_data().await;
-        assert_eq!(*data, vec![42])
+            .expect("should be able to get db data");
+        assert_eq!(data, vec![42])
     }
 }
