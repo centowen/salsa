@@ -59,21 +59,14 @@ impl FileStorage {
 
 #[async_trait]
 impl Storage for FileStorage {
-    async fn read(
-        &self,
-        key: &str,
-    ) -> Result<Option<Vec<u8>>, DataBaseError> {
+    async fn read(&self, key: &str) -> Result<Option<Vec<u8>>, DataBaseError> {
         let mut file = fs::File::open(self.get_path(key)).await?;
         let mut data = Vec::new();
         file.read_to_end(&mut data).await?;
         Ok(Some(data))
     }
 
-    async fn write(
-        &mut self,
-        key: &str,
-         data: &[u8]
-        ) -> Result<(), DataBaseError> {
+    async fn write(&mut self, key: &str, data: &[u8]) -> Result<(), DataBaseError> {
         let mut file = fs::File::create(self.get_path(key)).await?;
         file.write_all(data).await?;
         Ok(())
@@ -93,7 +86,9 @@ where
 /// Changes to the data in the returned database are never written to any
 /// file.
 pub fn create_in_memory_database() -> DataBase<InMemoryStorage> {
-    let store = InMemoryStorage { data: HashMap::new() };
+    let store = InMemoryStorage {
+        data: HashMap::new(),
+    };
     DataBase::<InMemoryStorage> {
         storage: Arc::new(RwLock::new(store)),
     }
@@ -141,9 +136,7 @@ where
     {
         let storage = self.storage.read().await;
         match storage.read(key).await? {
-            Some(data) => {
-                Ok(serde_json::from_slice(&data)?)
-            }
+            Some(data) => Ok(serde_json::from_slice(&data)?),
             None => Ok(T::default()),
         }
     }
