@@ -149,13 +149,13 @@ where
     ///
     /// # Examples
     ///
-    /// ```
-    /// use backend::database::DataBase;
+    /// ```rust
+    /// use backend::database::{DataBase, create_in_memory_database};
     ///
-    /// let db = DataBase::create_in_memory();
-    /// let data = db.set_data::<Vec<i32>("numbers", vec![42]).await;
-    /// let data = db.get_data::<Vec<i32>("numbers").await;
-    /// assert_eq!(data, vec![42])
+    /// let db = create_in_memory_database();
+    /// db.update_data::<Vec<i32>>("numbers", |mut v| v.push(42)).await.unwrap();
+    /// let data = db.get_data::<Vec<i32>("numbers").await.unwrap();
+    /// assert_eq!(data, vec![42]);
     /// ```
     pub async fn get_data<T>(&self, key: &'static str) -> Result<T, DataBaseError>
     where
@@ -179,12 +179,13 @@ where
     ///
     /// # Examples
     ///
-    /// ```
-    /// use backend::database::DataBase;
+    /// ```rust
+    /// use backend::database::{DataBase, create_in_memory_database};
     ///
     /// let db = create_in_memory_database();
     /// db.update_data::<Vec<i32>>("numbers", |mut v| v.push(42)).await.unwrap();
-    /// assert_eq!(db.get_data::<Vec<i32>>("numbers").await, vec![42])
+    /// let data = db.get_data::<Vec<i32>>("numbers").await.unwrap();
+    /// assert_eq!(data, vec![42]);
     /// ```
     pub async fn update_data<T, F>(&self, key: &'static str, f: F) -> Result<(), DataBaseError>
     where
