@@ -25,78 +25,56 @@ pub enum DataBaseError {
 
 #[async_trait]
 pub trait Storage: Sized + Clone + Send + Sync {
-    type StorageConfiguration: Clone + Send + Sync;
-
-    async fn create(
-        configuration: &Self::StorageConfiguration,
-        key: &str,
-        data: &[u8],
-    ) -> Result<Self, DataBaseError>;
-    async fn read(&self) -> Result<Vec<u8>, DataBaseError>;
-    async fn write(&mut self, data: &[u8]) -> Result<(), DataBaseError>;
+    async fn read(&self, key: &str) -> Result<Option<Vec<u8>>, DataBaseError>;
+    async fn write(&mut self, key: &str, data: &[u8]) -> Result<(), DataBaseError>;
 }
 
 #[derive(Debug, Clone)]
 pub struct InMemoryStorage {
-    data: Vec<u8>,
+    data: HashMap<String, Vec<u8>>,
 }
 
 #[async_trait]
 impl Storage for InMemoryStorage {
-    type StorageConfiguration = ();
-
-    async fn create(
-        _configuration: &Self::StorageConfiguration,
-        _key: &str,
-        data: &[u8],
-    ) -> Result<Self, DataBaseError> {
-        Ok(Self { data: data.into() })
+    async fn read(&self, key: &str) -> Result<Option<Vec<u8>>, DataBaseError> {
+        Ok(self.data.get(key).cloned())
     }
 
-    async fn read(&self) -> Result<Vec<u8>, DataBaseError> {
-        Ok(self.data.clone())
-    }
-
-    async fn write(&mut self, data: &[u8]) -> Result<(), DataBaseError> {
-        self.data = data.into();
+    async fn write(&mut self, key: &str, data: &[u8]) -> Result<(), DataBaseError> {
+        self.data.insert(key.to_string(), data.to_vec());
         Ok(())
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct FileStorage {
-    path: std::path::PathBuf,
+    directory_path: std::path::PathBuf,
 }
 
-#[derive(Debug, Clone)]
-pub struct FileStorageConfiguration {
-    path: std::path::PathBuf,
+impl FileStorage {
+    fn get_path(&self, key: &str) -> std::path::PathBuf {
+        self.directory_path.join(format!("{}.json", key))
+    }
 }
 
 #[async_trait]
 impl Storage for FileStorage {
-    type StorageConfiguration = FileStorageConfiguration;
-
-    async fn create(
-        configuration: &Self::StorageConfiguration,
+    async fn read(
+        &self,
         key: &str,
-        data: &[u8],
-    ) -> Result<Self, DataBaseError> {
-        let path = configuration.path.join(format!("{}.json", key));
-        let mut file = fs::File::create(&path).await?;
-        file.write_all(&data).await?;
-        Ok(Self { path })
-    }
-
-    async fn read(&self) -> Result<Vec<u8>, DataBaseError> {
-        let mut file = fs::File::open(&self.path).await?;
+    ) -> Result<Option<Vec<u8>>, DataBaseError> {
+        let mut file = fs::File::open(self.get_path(key)).await?;
         let mut data = Vec::new();
         file.read_to_end(&mut data).await?;
-        Ok(data)
+        Ok(Some(data))
     }
 
-    async fn write(&mut self, data: &[u8]) -> Result<(), DataBaseError> {
-        let mut file = fs::File::create(&self.path).await?;
+    async fn write(
+        &mut self,
+        key: &str,
+         data: &[u8]
+        ) -> Result<(), DataBaseError> {
+        let mut file = fs::File::create(self.get_path(key)).await?;
         file.write_all(data).await?;
         Ok(())
     }
@@ -107,8 +85,7 @@ pub struct DataBase<StorageType>
 where
     StorageType: Storage,
 {
-    storage: Arc<RwLock<HashMap<&'static str, StorageType>>>,
-    storage_configuration: StorageType::StorageConfiguration,
+    storage: Arc<RwLock<StorageType>>,
 }
 
 /// Create an in-memory database.
@@ -116,9 +93,9 @@ where
 /// Changes to the data in the returned database are never written to any
 /// file.
 pub fn create_in_memory_database() -> DataBase<InMemoryStorage> {
+    let store = InMemoryStorage { data: HashMap::new() };
     DataBase::<InMemoryStorage> {
-        storage: Arc::new(RwLock::new(HashMap::new())),
-        storage_configuration: (),
+        storage: Arc::new(RwLock::new(store)),
     }
 }
 
@@ -132,11 +109,12 @@ pub async fn create_database_from_directory(
         fs::create_dir(directory).await?;
     }
 
+    let storage = FileStorage {
+        directory_path: std::path::Path::new(directory).to_owned(),
+    };
+
     Ok(DataBase::<FileStorage> {
-        storage: Arc::new(RwLock::new(HashMap::new())),
-        storage_configuration: FileStorageConfiguration {
-            path: std::path::Path::new(directory).to_owned(),
-        },
+        storage: Arc::new(RwLock::new(storage)),
     })
 }
 
@@ -157,14 +135,13 @@ where
     /// let data = db.get_data::<Vec<i32>("numbers").await.unwrap();
     /// assert_eq!(data, vec![42]);
     /// ```
-    pub async fn get_data<T>(&self, key: &'static str) -> Result<T, DataBaseError>
+    pub async fn get_data<T>(&self, key: &str) -> Result<T, DataBaseError>
     where
         T: DeserializeOwned + Serialize + Default,
     {
-        let storages = self.storage.read().await;
-        match storages.get(key) {
-            Some(storage) => {
-                let data = storage.read().await?;
+        let storage = self.storage.read().await;
+        match storage.read(key).await? {
+            Some(data) => {
                 Ok(serde_json::from_slice(&data)?)
             }
             None => Ok(T::default()),
@@ -187,32 +164,21 @@ where
     /// let data = db.get_data::<Vec<i32>>("numbers").await.unwrap();
     /// assert_eq!(data, vec![42]);
     /// ```
-    pub async fn update_data<T, F>(&self, key: &'static str, f: F) -> Result<(), DataBaseError>
+    pub async fn update_data<T, F>(&self, key: &str, f: F) -> Result<(), DataBaseError>
     where
         T: DeserializeOwned + Serialize + Default,
         F: FnOnce(T) -> T,
     {
-        let mut storages = self.storage.write().await;
+        let mut storage = self.storage.write().await;
 
-        match storages.get_mut(key) {
-            Some(storage) => {
-                let data = storage.read().await?;
-                let value = serde_json::from_slice(&data)?;
-                let value = f(value);
-                let data = serde_json::to_vec(&value)?;
-                storage.write(&data).await?;
-            }
-            None => {
-                let value = T::default();
-                let value = f(value);
-                let data = serde_json::to_vec(&value)?;
-
-                storages.insert(
-                    key,
-                    StorageType::create(&self.storage_configuration, key, &data).await?,
-                );
-            }
+        let value = match storage.read(key).await? {
+            Some(data) => serde_json::from_slice(&data)?,
+            None => T::default(),
         };
+
+        let value = f(value);
+        let data = serde_json::to_vec(&value)?;
+        storage.write(key, &data).await?;
 
         Ok(())
     }
