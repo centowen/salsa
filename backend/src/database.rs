@@ -219,4 +219,22 @@ mod test {
             .expect("should be able to get db data");
         assert_eq!(data, vec![42])
     }
+
+    #[tokio::test]
+    async fn test_update_multiple_times() {
+        let db = create_in_memory_database();
+        for i in 0..10 {
+            db.update_data::<Vec<i32>, _>("numbers", |mut v| {
+                v.push(i);
+                v
+            })
+            .await
+            .expect("should be able to update db data");
+        }
+        let data = db
+            .get_data::<Vec<i32>>("numbers")
+            .await
+            .expect("should be able to get db data");
+        assert_eq!(data, (0..10).collect::<Vec<i32>>())
+    }
 }
