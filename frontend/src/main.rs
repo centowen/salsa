@@ -9,6 +9,7 @@ mod services;
 
 use common::TelescopeTarget;
 use pages::bookings::BookingsPage;
+use pages::make_booking::MakeBookingPage;
 use pages::observe::ObservePage;
 use pages::telescope::TelescopePage;
 use pages::weather::WeatherPage;
@@ -32,6 +33,8 @@ pub enum Route {
     Weather,
     #[at("/salsa/bookings")]
     Bookings,
+    #[at("/salsa/make_bookings")]
+    MakeBooking,
     #[at("/salsa/observe")]
     Observe,
     #[at("/salsa/telescope/:id")]
@@ -48,6 +51,9 @@ fn switch(routes: Route) -> Html {
         },
         Route::Bookings => html! {
             <BookingsPage />
+        },
+        Route::MakeBooking => html! {
+            <MakeBookingPage />
         },
         Route::Observe => html! {
             <ObservePage />

@@ -14,3 +14,19 @@ a {
     margin: 4px;
     width: 100%;
 }
+
+.calendar .date {
+    font-size: 90%;
+    padding: 6px;
+    text-align: center;
+}
+.calendar a {
+    text-decoration: none;
+}
+.calendar .cur-date {
+    border-radius: 6px;
+    background-color: #c0d0ee;
+}
+.calendar .other-month a {
+    color: #999999;
+}
