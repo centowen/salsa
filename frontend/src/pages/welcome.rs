@@ -33,6 +33,9 @@ impl Component for WelcomePage {
                     <Link<Route> to={Route::Bookings}>{ "Bookings" }</Link<Route>>
                 </div>
                 <div class="list-entry">
+                    <Link<Route> to={Route::MakeBooking}>{ "Make booking" }</Link<Route>>
+                </div>
+                <div class="list-entry">
                     <Link<Route> to={Route::Weather}>{ "Weather information" }</Link<Route>>
                 </div>
             </div>
