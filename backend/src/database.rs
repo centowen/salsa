@@ -1,7 +1,5 @@
 use async_trait::async_trait;
-use serde::de::DeserializeOwned;
-use serde::Serialize;
-use std::collections::HashMap;
+use serde::{Deserialize, Serialize};
 use std::io;
 use std::sync::Arc;
 use thiserror::Error;
@@ -25,49 +23,46 @@ pub enum DataBaseError {
 
 #[async_trait]
 pub trait Storage: Sized + Clone + Send + Sync {
-    async fn read(&self, key: &str) -> Result<Option<Vec<u8>>, DataBaseError>;
-    async fn write(&mut self, key: &str, data: &[u8]) -> Result<(), DataBaseError>;
+    async fn read(&self) -> Result<Option<Vec<u8>>, DataBaseError>;
+    async fn write(&mut self, data: &[u8]) -> Result<(), DataBaseError>;
 }
 
 #[derive(Debug, Clone)]
 pub struct InMemoryStorage {
-    data: HashMap<String, Vec<u8>>,
+    data: Vec<u8>,
 }
 
 #[async_trait]
 impl Storage for InMemoryStorage {
-    async fn read(&self, key: &str) -> Result<Option<Vec<u8>>, DataBaseError> {
-        Ok(self.data.get(key).cloned())
+    async fn read(&self) -> Result<Option<Vec<u8>>, DataBaseError> {
+        if self.data.is_empty() {
+            return Ok(None);
+        }
+        Ok(Some(self.data.clone()))
     }
 
-    async fn write(&mut self, key: &str, data: &[u8]) -> Result<(), DataBaseError> {
-        self.data.insert(key.to_string(), data.to_vec());
+    async fn write(&mut self, data: &[u8]) -> Result<(), DataBaseError> {
+        self.data = data.to_vec();
         Ok(())
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct FileStorage {
-    directory_path: std::path::PathBuf,
-}
-
-impl FileStorage {
-    fn get_path(&self, key: &str) -> std::path::PathBuf {
-        self.directory_path.join(format!("{}.json", key))
-    }
+    file_path: std::path::PathBuf,
 }
 
 #[async_trait]
 impl Storage for FileStorage {
-    async fn read(&self, key: &str) -> Result<Option<Vec<u8>>, DataBaseError> {
-        let mut file = fs::File::open(self.get_path(key)).await?;
+    async fn read(&self) -> Result<Option<Vec<u8>>, DataBaseError> {
+        let mut file = fs::File::open(&self.file_path).await?;
         let mut data = Vec::new();
         file.read_to_end(&mut data).await?;
         Ok(Some(data))
     }
 
-    async fn write(&mut self, key: &str, data: &[u8]) -> Result<(), DataBaseError> {
-        let mut file = fs::File::create(self.get_path(key)).await?;
+    async fn write(&mut self, data: &[u8]) -> Result<(), DataBaseError> {
+        let mut file = fs::File::create(&self.file_path).await?;
         file.write_all(data).await?;
         Ok(())
     }
@@ -86,9 +81,7 @@ where
 /// Changes to the data in the returned database are never written to any
 /// file.
 pub fn create_in_memory_database() -> DataBase<InMemoryStorage> {
-    let store = InMemoryStorage {
-        data: HashMap::new(),
-    };
+    let store = InMemoryStorage { data: Vec::new() };
     DataBase::<InMemoryStorage> {
         storage: Arc::new(RwLock::new(store)),
     }
@@ -98,19 +91,26 @@ pub fn create_in_memory_database() -> DataBase<InMemoryStorage> {
 ///
 /// The database support multiple keys with each key having its own file.
 pub async fn create_database_from_directory(
-    directory: &str,
+    file_path: &str,
 ) -> Result<DataBase<FileStorage>, DataBaseError> {
-    if !fs::try_exists(directory).await? {
-        fs::create_dir(directory).await?;
-    }
-
-    let storage = FileStorage {
-        directory_path: std::path::Path::new(directory).to_owned(),
-    };
+    let file_path = std::path::Path::new(file_path).to_owned();
+    let storage = FileStorage { file_path };
 
     Ok(DataBase::<FileStorage> {
         storage: Arc::new(RwLock::new(storage)),
     })
+}
+
+pub trait Key {
+    type Type;
+    fn key() -> &'static str;
+}
+
+use common::Booking;
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct DataModel {
+    pub bookings: Vec<Booking>,
 }
 
 impl<StorageType> DataBase<StorageType>
@@ -130,14 +130,11 @@ where
     /// let data = db.get_data::<Vec<i32>("numbers").await.unwrap();
     /// assert_eq!(data, vec![42]);
     /// ```
-    pub async fn get_data<T>(&self, key: &str) -> Result<T, DataBaseError>
-    where
-        T: DeserializeOwned + Serialize + Default,
-    {
+    pub async fn get_data(&self) -> Result<DataModel, DataBaseError> {
         let storage = self.storage.read().await;
-        match storage.read(key).await? {
+        match storage.read().await? {
             Some(data) => Ok(serde_json::from_slice(&data)?),
-            None => Ok(T::default()),
+            None => Ok(DataModel::default()),
         }
     }
 
@@ -152,26 +149,26 @@ where
     /// ```rust
     /// use backend::database::{DataBase, create_in_memory_database};
     ///
+    /// ## let booking = Booking { id: 42, ..Default::default()}
     /// let db = create_in_memory_database();
-    /// db.update_data::<Vec<i32>>("numbers", |mut v| v.push(42)).await.unwrap();
-    /// let data = db.get_data::<Vec<i32>>("numbers").await.unwrap();
-    /// assert_eq!(data, vec![42]);
+    /// db.update_data(|mut datamodel| datamodel.bookings.push(booking)).await.unwrap();
+    /// let data = db.get_data().await.unwrap();
+    /// assert_eq!(data, DataModel{bookings: vec![booking], ..Default::default()});
     /// ```
-    pub async fn update_data<T, F>(&self, key: &str, f: F) -> Result<(), DataBaseError>
+    pub async fn update_data<F>(&self, f: F) -> Result<(), DataBaseError>
     where
-        T: DeserializeOwned + Serialize + Default,
-        F: FnOnce(T) -> T,
+        F: FnOnce(DataModel) -> DataModel,
     {
-        let mut storage = self.storage.write().await;
+        let mut storage_handle = self.storage.write().await;
 
-        let value = match storage.read(key).await? {
+        let value = match storage_handle.read().await? {
             Some(data) => serde_json::from_slice(&data)?,
-            None => T::default(),
+            None => DataModel::default(),
         };
 
         let value = f(value);
         let data = serde_json::to_vec(&value)?;
-        storage.write(key, &data).await?;
+        storage_handle.write(&data).await?;
 
         Ok(())
     }
@@ -179,55 +176,64 @@ where
 
 #[cfg(test)]
 mod test {
+    use chrono::{Duration, Utc};
+
     use super::*;
 
     #[tokio::test]
-    async fn test_get_data() {
+    async fn given_no_previous_write_then_get_data_returns_default() {
         let db = create_in_memory_database();
-        db.update_data("numbers", |mut numbers: Vec<i32>| {
-            numbers.push(42);
-            numbers
+        let data = db.get_data().await.expect("should be able to get db data");
+        assert_eq!(DataModel::default(), data);
+    }
+
+    #[tokio::test]
+    async fn test_get_data() {
+        let booking = Booking {
+            start_time: Utc::now(),
+            end_time: Utc::now() + Duration::hours(1),
+            telescope_name: "test".to_string(),
+            user_name: "test".to_string(),
+        };
+        let db = create_in_memory_database();
+        db.update_data(|mut data_model| {
+            data_model.bookings.push(booking.clone());
+            data_model
         })
         .await
         .expect("msshould be able to set db data");
-        let data = db
-            .get_data::<Vec<i32>>("numbers")
-            .await
-            .expect("should be able to get db data");
-        assert_eq!(data, vec![42])
+        let data = db.get_data().await.expect("should be able to get db data");
+        assert_eq!(data.bookings, vec![booking]);
     }
 
     #[tokio::test]
     async fn test_update_data() {
+        let booking1 = Booking {
+            start_time: Utc::now(),
+            end_time: Utc::now() + Duration::hours(1),
+            telescope_name: "test1".to_string(),
+            user_name: "test".to_string(),
+        };
+        let booking2 = Booking {
+            start_time: Utc::now(),
+            end_time: Utc::now() + Duration::hours(1),
+            telescope_name: "test2".to_string(),
+            user_name: "test".to_string(),
+        };
         let db = create_in_memory_database();
-        db.update_data::<Vec<i32>, _>("numbers", |mut v| {
-            v.push(42);
-            v
+        db.update_data(|mut data_model| {
+            data_model.bookings.push(booking1.clone());
+            data_model
         })
         .await
-        .expect("should be able to update db data");
-        let data = db
-            .get_data::<Vec<i32>>("numbers")
-            .await
-            .expect("should be able to get db data");
-        assert_eq!(data, vec![42])
-    }
-
-    #[tokio::test]
-    async fn test_update_multiple_times() {
-        let db = create_in_memory_database();
-        for i in 0..10 {
-            db.update_data::<Vec<i32>, _>("numbers", |mut v| {
-                v.push(i);
-                v
-            })
-            .await
-            .expect("should be able to update db data");
-        }
-        let data = db
-            .get_data::<Vec<i32>>("numbers")
-            .await
-            .expect("should be able to get db data");
-        assert_eq!(data, (0..10).collect::<Vec<i32>>())
+        .expect("msshould be able to set db data");
+        db.update_data(|mut data_model| {
+            data_model.bookings.push(booking2.clone());
+            data_model
+        })
+        .await
+        .expect("msshould be able to set db data");
+        let data = db.get_data().await.expect("should be able to get db data");
+        assert_eq!(data.bookings, vec![booking1, booking2]);
     }
 }
