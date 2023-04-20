@@ -1,0 +1,73 @@
+{
+    "bookings": [
+    ],
+    "telescopes": [
+        {
+            "name": "fake",
+            "enabled": true,
+            "location": {
+                "longitude": 0.20802143022,
+                "latitude": 1.00170457462
+            },
+            "min_altitude": 0.087,
+            "telescope_type": {
+                "Fake": {
+                    "definition": {
+                        "slewing_speed": 0.314
+                    }
+                }
+            }
+        },
+        {
+            "name": "brage",
+            "enabled": false,
+            "location": {
+                "longitude": 0.20802143022,
+                "latitude": 1.00170457462
+            },
+            "min_altitude": 0.087,
+            "telescope_type": {
+                "Salsa": {
+                    "definition": {
+                        "controller_address": "192.168.5.10:23",
+                        "receiver_address": "192.168.5.31"
+                    }
+                }
+            }
+        },
+        {
+            "name": "vale",
+            "enabled": false,
+            "location": {
+                "longitude": 0.20802143022,
+                "latitude": 1.00170457462
+            },
+            "min_altitude": 0.087,
+            "telescope_type": {
+                "Salsa": {
+                    "definition": {
+                        "controller_address": "192.168.5.11:23",
+                        "receiver_address": "192.168.5.31"
+                    }
+                }
+            }
+        },
+        {
+            "name": "torre",
+            "enabled": false,
+            "location": {
+                "longitude": 0.20802143022,
+                "latitude": 1.00170457462
+            },
+            "min_altitude": 0.087,
+            "telescope_type": {
+                "Salsa": {
+                    "definition": {
+                        "controller_address": "192.168.5.12:23",
+                        "receiver_address": "192.168.5.31"
+                    }
+                }
+            }
+        }
+    ]
+}
