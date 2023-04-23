@@ -8,7 +8,8 @@ use common::{
 };
 use hex_literal::hex;
 use std::sync::Arc;
-use tokio::sync::Mutex;
+use tokio::sync::{mpsc, oneshot, Mutex};
+use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
 use std::io::{Read, Write};
@@ -20,6 +21,81 @@ use rustfft::{num_complex::Complex, FftPlanner};
 use uhd::{self, StreamCommand, StreamCommandType, StreamTime, TuneRequest, Usrp};
 
 pub const LOWEST_ALLOWED_ALTITUDE: f64 = 5.0f64 / 180.0f64 * std::f64::consts::PI;
+
+enum Command {
+    GetDirection {
+        resp: oneshot::Sender<Result<Direction, TelescopeError>>,
+    },
+}
+
+pub struct SalsaTelescope {
+    tx: mpsc::Sender<Command>,
+}
+
+impl SalsaTelescope {
+    fn create(telescope_address: String) -> SalsaTelescope {
+        let (tx, mut rx) = mpsc::channel(5);
+        let telescope_impl = create(telescope_address);
+        tokio::spawn(async move {
+            while let Some(cmd) = rx.recv().await {
+                match cmd {
+                    Command::GetDirection { resp } => {
+                        let dir = telescope_impl.get_direction().await;
+                        resp.send(dir).unwrap();
+                    }
+                };
+            }
+        });
+        SalsaTelescope { tx }
+    }
+}
+
+#[async_trait]
+impl Telescope for SalsaTelescope {
+    async fn get_direction(&self) -> Result<Direction, TelescopeError> {
+        let (resp_tx, resp_rx) = oneshot::channel();
+        let cmd = Command::GetDirection { resp: resp_tx };
+        if let Err(error) = self.tx.send(cmd).await {
+            // TODO: Proper error (internal failure?), panic?
+            // Implement From on TelescopeError to be able to use?
+            return Err(TelescopeError::TelescopeNotConnected);
+        };
+        match resp_rx.await {
+            Ok(result) => result,
+            Err(_) => Err(TelescopeError::TelescopeNotConnected),
+        }
+    }
+
+    async fn get_target(&self) -> Result<TelescopeTarget, TelescopeError> {
+        todo!();
+    }
+
+    async fn set_target(
+        &mut self,
+        target: TelescopeTarget,
+    ) -> Result<TelescopeTarget, TelescopeError> {
+        todo!();
+    }
+
+    async fn set_receiver_configuration(
+        &mut self,
+        receiver_configuration: ReceiverConfiguration,
+    ) -> Result<ReceiverConfiguration, ReceiverError> {
+        todo!();
+    }
+
+    async fn get_info(&self) -> Result<TelescopeInfo, TelescopeError> {
+        todo!();
+    }
+
+    async fn update(&mut self, _delta_time: Duration) -> Result<(), TelescopeError> {
+        todo!();
+    }
+
+    async fn restart(&mut self) -> Result<(), TelescopeError> {
+        todo!();
+    }
+}
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 enum TelescopeCommand {
@@ -100,7 +176,7 @@ pub struct ActiveIntegration {
     measurement_task: tokio::task::JoinHandle<()>,
 }
 
-pub struct SalsaTelescope {
+pub struct SalsaTelescopeImpl {
     address: String,
     timeout: Duration,
     target: TelescopeTarget,
@@ -117,8 +193,8 @@ pub struct SalsaTelescope {
     active_integration: Option<ActiveIntegration>,
 }
 
-pub fn create(telescope_address: String) -> SalsaTelescope {
-    SalsaTelescope {
+pub fn create(telescope_address: String) -> SalsaTelescopeImpl {
+    SalsaTelescopeImpl {
         address: telescope_address,
         timeout: Duration::from_secs(1),
         target: TelescopeTarget::Stopped,
@@ -139,7 +215,7 @@ pub fn create(telescope_address: String) -> SalsaTelescope {
     }
 }
 
-fn create_connection(telescope: &SalsaTelescope) -> Result<TcpStream, std::io::Error> {
+fn create_connection(telescope: &SalsaTelescopeImpl) -> Result<TcpStream, std::io::Error> {
     let address = SocketAddr::from_str(telescope.address.as_str()).unwrap();
     let stream = TcpStream::connect_timeout(&address, telescope.timeout)?;
     stream.set_read_timeout(Some(telescope.timeout))?;
@@ -394,7 +470,7 @@ async fn measure(
 }
 
 #[async_trait]
-impl Telescope for SalsaTelescope {
+impl Telescope for SalsaTelescopeImpl {
     async fn get_direction(&self) -> Result<Direction, TelescopeError> {
         let mut stream = create_connection(&self)?;
 
@@ -549,7 +625,7 @@ fn directions_are_close(a: Direction, b: Direction, tol: f64) -> bool {
     (a.azimuth - b.azimuth).abs() < epsilon && (a.altitude - b.altitude).abs() < epsilon
 }
 
-impl SalsaTelescope {
+impl SalsaTelescopeImpl {
     fn calculate_target_horizontal(&self, when: DateTime<Utc>) -> Option<Direction> {
         match self.target {
             TelescopeTarget::Equatorial { ra, dec } => {
