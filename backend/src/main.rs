@@ -1,7 +1,6 @@
-use crate::database::DataBase;
+use crate::database::create_database_from_directory;
 use crate::telescope::{create_telescope_collection, TELESCOPE_UPDATE_INTERVAL};
 use clap::Parser;
-use common::Booking;
 use std::net::Ipv4Addr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -83,9 +82,7 @@ async fn main() {
     };
     log::info!("Started {} telescope services", telescope_services.len());
 
-    let database = DataBase::<Vec<Booking>>::from_file("database.json")
-        .await
-        .unwrap();
+    let database = create_database_from_directory("database").await.unwrap();
 
     let weather_routes = warp::path!("api" / "weather").map(weather::get_weather_info);
 
