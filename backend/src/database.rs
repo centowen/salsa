@@ -106,11 +106,12 @@ pub trait Key {
     fn key() -> &'static str;
 }
 
-use common::Booking;
+use common::{Booking, TelescopeDefinition};
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct DataModel {
     pub bookings: Vec<Booking>,
+    pub telescopes: Vec<TelescopeDefinition>,
 }
 
 impl<StorageType> DataBase<StorageType>

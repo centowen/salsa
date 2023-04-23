@@ -101,7 +101,9 @@ pub struct ActiveIntegration {
 }
 
 pub struct SalsaTelescope {
-    address: String,
+    name: String,
+    controller_address: String,
+    receiver_address: String,
     timeout: Duration,
     target: TelescopeTarget,
     commanded_horizontal: Option<Direction>,
@@ -117,9 +119,15 @@ pub struct SalsaTelescope {
     active_integration: Option<ActiveIntegration>,
 }
 
-pub fn create(telescope_address: String) -> SalsaTelescope {
+pub fn create(
+    name: String,
+    controller_address: String,
+    receiver_address: String,
+) -> SalsaTelescope {
     SalsaTelescope {
-        address: telescope_address,
+        name,
+        controller_address,
+        receiver_address,
         timeout: Duration::from_secs(1),
         target: TelescopeTarget::Stopped,
         commanded_horizontal: None,
@@ -140,7 +148,7 @@ pub fn create(telescope_address: String) -> SalsaTelescope {
 }
 
 fn create_connection(telescope: &SalsaTelescope) -> Result<TcpStream, std::io::Error> {
-    let address = SocketAddr::from_str(telescope.address.as_str()).unwrap();
+    let address = SocketAddr::from_str(telescope.controller_address.as_str()).unwrap();
     let stream = TcpStream::connect_timeout(&address, telescope.timeout)?;
     stream.set_read_timeout(Some(telescope.timeout))?;
     stream.set_write_timeout(Some(telescope.timeout))?;
@@ -335,6 +343,7 @@ fn median(mut xs: Vec<f64>) -> f64 {
 }
 
 async fn measure(
+    address: String,
     measurements: Arc<Mutex<Vec<Measurement>>>,
     cancellation_token: CancellationToken,
 ) -> () {
@@ -348,8 +357,8 @@ async fn measure(
     let gain: f64 = 38.0;
 
     // Setup usrp for taking data
-    let mut usrp = Usrp::open("addr=192.168.5.31").unwrap(); // Brage
-                                                             //let mut usrp = Usrp::open("addr=192.168.5.32").unwrap(); // Vale
+    let args = format!("addr={}", address);
+    let mut usrp = Usrp::open(&args).unwrap(); // Brage
 
     // The N210 only has one input channel 0.
     usrp.set_rx_gain(gain, 0, "").unwrap(); // empty string to set all gains
@@ -430,10 +439,11 @@ impl Telescope for SalsaTelescope {
             self.receiver_configuration.integrate = true;
             let cancellation_token = CancellationToken::new();
             let measurement_task = {
+                let address = self.receiver_address.clone();
                 let measurements = self.measurements.clone();
                 let cancellation_token = cancellation_token.clone();
                 tokio::spawn(async move {
-                    measure(measurements, cancellation_token).await;
+                    measure(address, measurements, cancellation_token).await;
                 })
             };
             self.active_integration = Some(ActiveIntegration {
@@ -485,6 +495,7 @@ impl Telescope for SalsaTelescope {
         };
 
         Ok(TelescopeInfo {
+            id: self.name.clone(),
             status,
             current_horizontal,
             commanded_horizontal: self.commanded_horizontal,
@@ -516,7 +527,7 @@ impl Telescope for SalsaTelescope {
         };
 
         if let Some(active_integration) = self.active_integration.take() {
-            if active_integration.cancellation_token.is_cancelled() {
+            if active_integration.measurement_task.is_finished() {
                 if let Err(error) = active_integration.measurement_task.await {
                     log::error!("Error while waiting for measurement task: {}", error);
                 }
@@ -794,7 +805,11 @@ mod test {
 
     #[tokio::test]
     async fn test_update_direction() {
-        let mut telescope = create("127.0.0.1:3000".to_string());
+        let mut telescope = create(
+            "salsa".to_string(),
+            "127.0.0.1:3000".to_string(),
+            "127.0.0.2".to_string(),
+        );
 
         let mut stream = FakeTelescopeConnection {
             horizontal: Direction {

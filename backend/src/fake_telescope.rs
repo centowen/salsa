@@ -14,8 +14,9 @@ const FAKE_TELESCOPE_PARKING_HORIZONTAL: Direction = Direction {
     azimuth: 0.0,
     altitude: PI / 2.0,
 };
-pub const FAKE_TELESCOPE_SLEWING_SPEED: f64 = PI / 10.0;
 pub const LOWEST_ALLOWED_ALTITUDE: f64 = 5.0 / 180. * PI;
+
+pub const FAKE_TELESCOPE_SLEWING_SPEED: f64 = PI / 10.0;
 pub const FAKE_TELESCOPE_CHANNELS: usize = 400;
 pub const FAKE_TELESCOPE_CHANNEL_WIDTH: f64 = 2e6f64 / FAKE_TELESCOPE_CHANNELS as f64;
 pub const FAKE_TELESCOPE_FIRST_CHANNEL: f64 =
@@ -144,8 +145,8 @@ impl Telescope for FakeTelescope {
                 .collect();
             Some(latest_observation)
         };
-        log::info!("blaha {:?}", self.receiver_configuration.integrate);
         Ok(TelescopeInfo {
+            id: self.name.clone(),
             status,
             current_horizontal: self.horizontal,
             commanded_horizontal: Some(target_horizontal),
