@@ -1,5 +1,5 @@
 use chrono::{Datelike, Duration, Months, NaiveDate, NaiveTime, TimeZone, Utc, Weekday};
-use common::Booking;
+use common::{Booking, TelescopeInfo};
 use gloo_net::http::Request;
 use web_sys::HtmlInputElement;
 use yew::html;
@@ -298,6 +298,32 @@ pub fn make_booking_page() -> Html {
         })
     };
 
+    let telescope_names = use_state(|| Vec::<String>::new());
+    use_effect_with_deps(
+        {
+            let telescope_names2 = telescope_names.clone();
+            |_| {
+                spawn_local(async move {
+                    match Request::get("/api/telescopes").send().await {
+                        Ok(response) => {
+                            log::info!("Got response: {:?}", response);
+                            let value = response
+                                .json::<Vec<TelescopeInfo>>()
+                                .await
+                                .expect("Failed to deserialize response");
+                            log::info!("Got response value: {:?}", value);
+                            telescope_names2.set(value.into_iter().map(|t| t.id).collect());
+                        }
+                        Err(error) => {
+                            log::error!("Failed to fetch: {}", error);
+                        }
+                    }
+                })
+            }
+        },
+        (),
+    );
+
     // TODO Labels? Or icons?
     html!(
         <div class="new-booking">
@@ -308,9 +334,9 @@ pub fn make_booking_page() -> Html {
                 <label for="telescope">{ "Telescope" }</label>
                 <select name="telescope" ref={ telescope_ref } id="telescope">
                     <option value="">{ "Any telescope" }</option>
-                    <option value="brage">{ "Brage" }</option>
-                    <option value="vale">{ "Vale" }</option>
-                    <option value="torre">{ "Torre" }</option>
+                    { telescope_names.iter().map(|t| html!{
+                        <option value={ t.to_string() }>{ t }</option>
+                    }).collect::<Html>() }
                 </select>
                 <input type="submit" value="Submit" />
             </form>
