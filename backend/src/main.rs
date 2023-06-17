@@ -12,6 +12,7 @@ mod fake_telescope;
 mod frontend_routes;
 mod salsa_telescope;
 mod telescope;
+mod telescope_controller;
 mod telescope_routes;
 mod weather;
 
