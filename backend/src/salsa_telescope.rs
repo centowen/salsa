@@ -1,5 +1,5 @@
 use crate::telescope::Telescope;
-use crate::telescope_controller::TelescopeController;
+use crate::telescope_tracker::TelescopeTracker;
 use async_trait::async_trait;
 use chrono::Utc;
 use common::{
@@ -23,7 +23,7 @@ pub struct ActiveIntegration {
 pub struct SalsaTelescope {
     name: String,
     receiver_address: String,
-    controller: TelescopeController,
+    controller: TelescopeTracker,
     receiver_configuration: ReceiverConfiguration,
     measurements: Arc<Mutex<Vec<Measurement>>>,
     active_integration: Option<ActiveIntegration>,
@@ -37,7 +37,7 @@ pub fn create(
     SalsaTelescope {
         name,
         receiver_address,
-        controller: TelescopeController::new(controller_address),
+        controller: TelescopeTracker::new(controller_address),
         receiver_configuration: ReceiverConfiguration { integrate: false },
         measurements: Arc::new(Mutex::new(Vec::new())),
         active_integration: None,
@@ -256,7 +256,7 @@ async fn measure(
 #[async_trait]
 impl Telescope for SalsaTelescope {
     async fn get_direction(&self) -> Result<Direction, TelescopeError> {
-        self.controller.direction().await
+        self.controller.direction()
     }
 
     async fn get_target(&self) -> Result<TelescopeTarget, TelescopeError> {
@@ -267,7 +267,7 @@ impl Telescope for SalsaTelescope {
         &mut self,
         target: TelescopeTarget,
     ) -> Result<TelescopeTarget, TelescopeError> {
-        self.controller.set_target(target).await
+        self.controller.set_target(target)
     }
 
     async fn set_receiver_configuration(
@@ -357,23 +357,10 @@ impl Telescope for SalsaTelescope {
 #[cfg(test)]
 mod test {
     use chrono::TimeZone;
+    use hex_literal::hex;
 
     use super::*;
     use std::f64::consts::PI;
-
-    #[test]
-    fn test_rot2prog_angle_to_bytes() {
-        assert_eq!(
-            rot2prog_angle_to_bytes(0.0),
-            hex!("3336303030"),
-            "0.0 should be 0x3336303030 (telescope expects angle + 360)"
-        );
-        assert_eq!(
-            rot2prog_angle_to_bytes(5.54_f64.to_radians()),
-            hex!("3336353534"),
-            "5.54 should be 0x3336353534 (example from documentation)"
-        );
-    }
 
     #[test]
     fn test_rot2prog_bytes_to_angle_documented() {
@@ -385,252 +372,6 @@ mod test {
             (rot2prog_bytes_to_angle_documented(&hex!("3338323333")) - 22.33_f64.to_radians())
                 .abs()
                 < 0.01,
-        );
-    }
-
-    #[test]
-    fn test_rot2prog_bytes_to_angle() {
-        assert!((rot2prog_bytes_to_angle(&hex!("0306000000")) - 0.0).abs() < 0.01,);
-    }
-
-    impl TelescopeCommand {
-        fn from_bytes(bytes: &[u8]) -> TelescopeCommand {
-            assert!(bytes.len() == 13);
-            if bytes[0] != 0x57 {
-                panic!("All commands should start with 0x57");
-            } else if bytes[bytes.len() - 1] != 0x20 {
-                panic!("All commands should end with 0x20");
-            }
-
-            match bytes[bytes.len() - 2] {
-                0x0F => TelescopeCommand::Stop,
-                0xEE => TelescopeCommand::Restart,
-                0x6F => TelescopeCommand::GetDirection,
-                0x5F => TelescopeCommand::SetDirection(Direction {
-                    azimuth: rot2prog_bytes_to_angle_documented(&bytes[1..=5]),
-                    altitude: rot2prog_bytes_to_angle_documented(&bytes[6..=10]),
-                }),
-                command_identifier => {
-                    panic!("Unknown command identifier: {:x}", command_identifier)
-                }
-            }
-        }
-    }
-
-    // Responses are documented as ascii encoded numbers, but the telescope seems to return the bytes directly.
-    fn rot2prog_response_angle_to_bytes(angle: f64) -> [u8; 5] {
-        let mut bytes = [0; 5];
-        let angle = ((angle.to_degrees() + 360.0) * 100.0).round();
-        bytes[0] = (angle / 10000.0) as u8;
-        bytes[1] = ((angle % 10000.0) / 1000.0) as u8;
-        bytes[2] = ((angle % 1000.0) / 100.0) as u8;
-        bytes[3] = ((angle % 100.0) / 10.0) as u8;
-        bytes[4] = (angle % 10.0) as u8;
-        bytes
-    }
-
-    impl TelescopeResponse {
-        fn to_bytes(&self) -> Vec<u8> {
-            match self {
-                TelescopeResponse::Ack => hex!("570000000000000000000020").to_vec(),
-                TelescopeResponse::CurrentDirection(direction) => {
-                    let mut bytes = Vec::with_capacity(13);
-                    bytes.extend(hex!("58"));
-                    bytes.extend(rot2prog_response_angle_to_bytes(direction.azimuth).as_slice());
-                    bytes.extend(rot2prog_response_angle_to_bytes(direction.altitude).as_slice());
-                    bytes.extend(hex!("20"));
-                    bytes
-                }
-            }
-        }
-    }
-
-    // This is a fake connection that can be used to test the telescope without a real connection
-    // It is set up with the response that the telescope should send and will store all writes
-    struct FakeTelescopeConnection {
-        horizontal: Direction,
-        commands: Vec<TelescopeCommand>,
-    }
-
-    impl Write for FakeTelescopeConnection {
-        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-            let command = TelescopeCommand::from_bytes(buf);
-            self.commands.push(command);
-            Ok(buf.len())
-        }
-
-        fn flush(&mut self) -> std::io::Result<()> {
-            Ok(())
-        }
-    }
-
-    impl Read for FakeTelescopeConnection {
-        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-            let response = match self.commands.last().expect("No commands sent to telescope") {
-                TelescopeCommand::Stop => TelescopeResponse::Ack,
-                TelescopeCommand::Restart => TelescopeResponse::Ack,
-                TelescopeCommand::GetDirection => {
-                    TelescopeResponse::CurrentDirection(self.horizontal)
-                }
-                TelescopeCommand::SetDirection(_) => {
-                    TelescopeResponse::CurrentDirection(self.horizontal)
-                }
-            }
-            .to_bytes();
-
-            buf[..response.len()].copy_from_slice(&response);
-            Ok(response.len())
-        }
-    }
-
-    #[test]
-    fn test_set_command() {
-        let mut stream = FakeTelescopeConnection {
-            horizontal: Direction {
-                azimuth: 0.0,
-                altitude: PI / 2.0,
-            },
-            commands: Vec::new(),
-        };
-
-        let response = send_command(
-            &mut stream,
-            TelescopeCommand::SetDirection(Direction {
-                azimuth: PI,
-                altitude: PI / 4.0,
-            }),
-        );
-        assert_eq!(
-            stream.commands,
-            [TelescopeCommand::SetDirection(Direction {
-                azimuth: PI,
-                altitude: PI / 4.0,
-            })]
-        );
-
-        let response = match response {
-            Ok(response) => response,
-            Err(e) => panic!("Error sending command: {}", e),
-        };
-        assert_eq!(
-            response,
-            TelescopeResponse::CurrentDirection(Direction {
-                azimuth: 0.0,
-                altitude: PI / 2.0,
-            })
-        );
-    }
-
-    #[tokio::test]
-    async fn test_update_direction() {
-        let mut telescope = create(
-            "salsa".to_string(),
-            "127.0.0.1:3000".to_string(),
-            "127.0.0.2".to_string(),
-        );
-
-        let mut stream = FakeTelescopeConnection {
-            horizontal: Direction {
-                azimuth: 0.0,
-                altitude: PI / 2.0,
-            },
-            commands: Vec::new(),
-        };
-
-        // Send an initial stop command to set the current direction
-        telescope
-            .update_direction(Utc::now(), &mut stream)
-            .await
-            .unwrap();
-        assert_eq!(
-            stream.commands,
-            [TelescopeCommand::GetDirection, TelescopeCommand::Stop]
-        );
-        assert_eq!(telescope.commanded_horizontal, None);
-        assert_eq!(
-            TelescopeStatus::Idle,
-            telescope.get_info().await.unwrap().status
-        );
-
-        // Inject the time to ensure that the target is not below horizon
-        let when = Utc.with_ymd_and_hms(2023, 4, 7, 12, 0, 0).unwrap();
-        stream.commands.clear();
-        telescope.target = TelescopeTarget::Galactic {
-            l: PI / 2.0,
-            b: 0.0,
-        };
-        telescope.update_direction(when, &mut stream).await.unwrap();
-        assert_eq!(2, stream.commands.len());
-        assert_eq!(stream.commands[0], TelescopeCommand::GetDirection);
-        assert!(matches!(
-            stream.commands[1],
-            TelescopeCommand::SetDirection { .. }
-        ));
-        assert!(telescope.commanded_horizontal.is_some());
-        assert_eq!(
-            TelescopeStatus::Slewing,
-            telescope.get_info().await.unwrap().status
-        );
-
-        // Calling update_direction when telescope is on target does not send set direction command
-        stream.horizontal = telescope.commanded_horizontal.unwrap();
-        stream.commands.clear();
-        telescope.update_direction(when, &mut stream).await.unwrap();
-        assert_eq!(stream.commands, [TelescopeCommand::GetDirection]);
-        assert_eq!(
-            TelescopeStatus::Tracking,
-            telescope.get_info().await.unwrap().status
-        );
-
-        // Stopping telescope send stop command
-        stream.commands.clear();
-        telescope.target = TelescopeTarget::Stopped;
-        telescope
-            .update_direction(Utc::now(), &mut stream)
-            .await
-            .unwrap();
-        assert_eq!(
-            stream.commands,
-            [TelescopeCommand::GetDirection, TelescopeCommand::Stop]
-        );
-        assert_eq!(telescope.commanded_horizontal, None);
-        assert_eq!(
-            TelescopeStatus::Idle,
-            telescope.get_info().await.unwrap().status
-        );
-
-        // Calling update_direction again does not send set direction command
-        stream.commands.clear();
-        telescope
-            .update_direction(Utc::now(), &mut stream)
-            .await
-            .unwrap();
-        assert_eq!(stream.commands, [TelescopeCommand::GetDirection]);
-        assert_eq!(telescope.commanded_horizontal, None);
-        assert_eq!(
-            TelescopeStatus::Idle,
-            telescope.get_info().await.unwrap().status
-        );
-
-        // Start tracking again
-        stream.commands.clear();
-        telescope.target = TelescopeTarget::Galactic {
-            l: PI / 2.0,
-            b: 0.0,
-        };
-        telescope.update_direction(when, &mut stream).await.unwrap();
-        assert_eq!(
-            TelescopeStatus::Tracking,
-            telescope.get_info().await.unwrap().status
-        );
-
-        // Wait 5 minutes when source moves across the sky
-        let when = when + chrono::Duration::minutes(5);
-        stream.commands.clear();
-        telescope.update_direction(when, &mut stream).await.unwrap();
-        assert_eq!(
-            TelescopeStatus::Slewing,
-            telescope.get_info().await.unwrap().status
         );
     }
 }

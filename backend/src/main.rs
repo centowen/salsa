@@ -14,6 +14,7 @@ mod salsa_telescope;
 mod telescope;
 mod telescope_controller;
 mod telescope_routes;
+mod telescope_tracker;
 mod weather;
 
 #[derive(Parser, Debug)]
