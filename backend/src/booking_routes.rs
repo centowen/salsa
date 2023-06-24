@@ -1,87 +1,56 @@
 use crate::database::{DataBase, Storage};
-use warp::Filter;
+use axum::{
+    extract::{Json, State},
+    http::StatusCode,
+    response::IntoResponse,
+    routing::get,
+    Router,
+};
+use common::Booking;
 
-pub fn routes<StorageType>(
-    db: DataBase<StorageType>,
-) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone
+pub fn routes(database: DataBase<impl Storage + 'static>) -> Router {
+    Router::new()
+        .route("/", get(get_bookings).post(add_booking))
+        .with_state(database)
+}
+
+pub async fn get_bookings<StorageType>(State(db): State<DataBase<StorageType>>) -> impl IntoResponse
 where
     StorageType: Storage,
 {
-    filters::get_bookings(db.clone()).or(filters::add_booking(db.clone()))
+    let data_model = db
+        .get_data()
+        .await
+        .expect("As long as no one is manually editing the database, this should never fail.");
+    Json(data_model.bookings)
 }
 
-mod filters {
-    use super::handlers;
-    use crate::database::{DataBase, Storage};
-    use warp::{Filter, Rejection, Reply};
-
-    pub fn get_bookings<StorageType>(
-        db: DataBase<StorageType>,
-    ) -> impl Filter<Extract = (impl Reply,), Error = Rejection> + Clone
-    where
-        StorageType: Storage,
-    {
-        warp::path!("api" / "bookings")
-            .and(warp::get())
-            .and(with_database(db))
-            .and_then(handlers::get_bookings)
-    }
-
-    pub fn add_booking<StorageType>(
-        db: DataBase<StorageType>,
-    ) -> impl Filter<Extract = (impl Reply,), Error = Rejection> + Clone
-    where
-        StorageType: Storage,
-    {
-        warp::path!("api" / "booking")
-            .and(warp::post())
-            .and(warp::body::json())
-            .and(with_database(db))
-            .then(handlers::add_booking)
-    }
-
-    fn with_database<StorageType>(
-        db: DataBase<StorageType>,
-    ) -> impl Filter<Extract = (DataBase<StorageType>,), Error = std::convert::Infallible> + Clone
-    where
-        StorageType: Storage,
-    {
-        warp::any().map(move || db.clone())
-    }
-}
-
-mod handlers {
-    use crate::database::{DataBase, Storage};
-    use common::Booking;
-    use warp::{Rejection, Reply};
-
-    pub async fn get_bookings<StorageType>(
-        db: DataBase<StorageType>,
-    ) -> Result<impl Reply, Rejection>
-    where
-        StorageType: Storage,
-    {
-        let data_model = db
-            .get_data()
-            .await
-            .expect("As long as no one is manually editing the database, this should never fail.");
-        Ok(warp::reply::json(&data_model.bookings))
-    }
-
-    pub async fn add_booking<StorageType>(booking: Booking, db: DataBase<StorageType>) -> impl Reply
-    where
-        StorageType: Storage,
-    {
-        match db.update_data(|mut data_model| { data_model.bookings.push(booking); data_model }).await {
-            Ok(_) => warp::reply::with_status(
-                db.get_data().await.expect("As long as no one is manually editing the database, this should never fail.").bookings.len().to_string(),
-                warp::http::StatusCode::CREATED,
-            ),
-            Err(_) => warp::reply::with_status(
-                "Database unavailable".to_string(),
-                warp::http::StatusCode::SERVICE_UNAVAILABLE,
-            ),
-        }
+pub async fn add_booking(
+    State(db): State<DataBase<impl Storage>>,
+    Json(booking): Json<Booking>,
+) -> (StatusCode, String) {
+    let res = db
+        .update_data(|mut data_model| {
+            data_model.bookings.push(booking);
+            data_model
+        })
+        .await;
+    match res {
+        Ok(_) => (
+            StatusCode::CREATED,
+            db.get_data()
+                .await
+                .expect(
+                    "As long as no one is manually editing the database, this should never fail.",
+                )
+                .bookings
+                .len()
+                .to_string(),
+        ),
+        Err(_) => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Database unavailable".to_string(),
+        ),
     }
 }
 
@@ -90,52 +59,76 @@ mod test {
     use crate::database::create_in_memory_database;
 
     use super::*;
+    use axum::{
+        body::Body,
+        http::{self, Request, StatusCode},
+    };
     use common::Booking;
+    use tower::ServiceExt;
 
     #[tokio::test]
     async fn test_get_bookings() {
-        let db = create_in_memory_database();
         let booking = Booking {
             telescope_name: "test-telescope".to_string(),
             user_name: "test-user".to_string(),
             start_time: chrono::Utc::now(),
             end_time: chrono::Utc::now(),
         };
-        db.update_data(|mut data_model| {
-            data_model.bookings.push(booking.clone());
-            data_model
+
+        let db = create_in_memory_database();
+        db.update_data(|mut datamodel| {
+            datamodel.bookings.push(booking.clone());
+            datamodel
         })
         .await
-        .expect("should be possible to set db data");
-        let response = warp::test::request()
-            .method("GET")
-            .path("/api/bookings")
-            .reply(&routes(db))
-            .await;
-        assert_eq!(response.status(), 200);
-        assert_eq!(
-            response.body(),
-            serde_json::to_string(&[booking]).unwrap().as_bytes()
-        );
+        .unwrap();
+        let app = routes(db);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method(http::Method::GET)
+                    .uri("/")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+        let bookings: Vec<Booking> = serde_json::from_slice(&body).unwrap();
+        assert_eq!(bookings, vec![booking]);
     }
 
     #[tokio::test]
     async fn test_add_booking() {
         let db = create_in_memory_database();
+        let app = routes(db.clone());
+
         let booking = Booking {
             telescope_name: "test-telescope".to_string(),
             user_name: "test-user".to_string(),
             start_time: chrono::Utc::now(),
             end_time: chrono::Utc::now(),
         };
-        let response = warp::test::request()
-            .method("POST")
-            .path("/api/booking")
-            .json(&booking)
-            .reply(&routes(db.clone()))
-            .await;
-        assert_eq!(response.status(), warp::http::StatusCode::CREATED);
-        assert_eq!(response.body(), "1"); // 1 because the database is empty before the request
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method(http::Method::POST)
+                    .uri("/")
+                    .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
+                    .body(Body::from(serde_json::to_vec(&booking.clone()).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::CREATED);
+        let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+        assert_eq!(body, "1"); // 1 because the database is empty before the request
 
         assert_eq!(
             vec![booking],

@@ -74,7 +74,7 @@ impl Component for TelescopePage {
 
     fn create(ctx: &Context<Self>) -> Self {
         let info_cb = ctx.link().callback(Message::UpdateInfo);
-        let endpoint = format!("/api/telescope/{}", &ctx.props().id);
+        let endpoint = format!("/api/telescopes/{}", &ctx.props().id);
         emit_info(info_cb, endpoint, Duration::from_millis(200));
         Self {
             configured_target: TelescopeTarget::Parked,
@@ -96,7 +96,7 @@ impl Component for TelescopePage {
                 self.tracking_configured = track;
                 self.waiting_for_command = true;
 
-                let endpoint = format!("/api/telescope/{}/target", ctx.props().id);
+                let endpoint = format!("/api/telescopes/{}/target", ctx.props().id);
 
                 {
                     let target = target;
@@ -168,7 +168,7 @@ impl Component for TelescopePage {
                 true
             }
             Message::SetReceiverConfiguration(integrate) => {
-                let endpoint = format!("/api/telescope/{}/receiver", ctx.props().id);
+                let endpoint = format!("/api/telescopes/{}/receiver", ctx.props().id);
                 let id = ctx.props().id.clone();
                 let receiver_configuration = ReceiverConfiguration { integrate };
                 let result_callback = ctx

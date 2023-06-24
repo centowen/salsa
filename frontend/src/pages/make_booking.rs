@@ -276,7 +276,7 @@ pub fn make_booking_page() -> Html {
             };
 
             spawn_local(async move {
-                match Request::post("/api/booking")
+                match Request::post("/api/bookings")
                     .json::<Booking>(&booking)
                     .unwrap()
                     .send()

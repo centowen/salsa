@@ -2,7 +2,7 @@ use common::WeatherInfo;
 use rand::thread_rng;
 use rand::Rng;
 
-pub fn get_weather_info() -> String {
+pub async fn get_weather_info() -> String {
     // TODO: Read temperature from relevant endpoint
     let mut rng = thread_rng();
     let weather_info = WeatherInfo {
