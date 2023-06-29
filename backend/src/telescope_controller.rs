@@ -178,26 +178,11 @@ mod test {
     }
     #[test]
     fn test_rot2prog_bytes_to_int() {
-        assert_eq!(
-            rot2prog_bytes_to_int(&hex!("00")),
-            0
-        );
-        assert_eq!(
-            rot2prog_bytes_to_int(&hex!("01")),
-            1
-        );
-        assert_eq!(
-            rot2prog_bytes_to_int(&hex!("00 01")),
-            1
-        );
-        assert_eq!(
-            rot2prog_bytes_to_int(&hex!("01 02")),
-            12
-        );
-        assert_eq!(
-            rot2prog_bytes_to_int(&hex!("09 09 09")),
-            999
-        );
+        assert_eq!(rot2prog_bytes_to_int(&hex!("00")), 0);
+        assert_eq!(rot2prog_bytes_to_int(&hex!("01")), 1);
+        assert_eq!(rot2prog_bytes_to_int(&hex!("00 01")), 1);
+        assert_eq!(rot2prog_bytes_to_int(&hex!("01 02")), 12);
+        assert_eq!(rot2prog_bytes_to_int(&hex!("09 09 09")), 999);
     }
 
     #[test]
