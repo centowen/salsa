@@ -1,7 +1,7 @@
+use hex_literal::hex;
 use std::io::prelude::*;
 use std::net::{TcpListener, TcpStream};
 use std::process;
-use hex_literal::hex;
 
 fn controller_connection(mut stream: TcpStream) {
     loop {
