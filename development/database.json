@@ -19,6 +19,23 @@
             }
         },
         {
+            "name": "fakesalsa",
+            "enabled": true,
+            "location": {
+                "longitude": 0.20802143022,
+                "latitude": 1.00170457462
+            },
+            "min_altitude": 0.087,
+            "telescope_type": {
+                "Salsa": {
+                    "definition": {
+                        "controller_address": "127.0.0.1:3001",
+                        "receiver_address": "127.0.0.1:3002"
+                    }
+                }
+            }
+        },
+        {
             "name": "brage",
             "enabled": false,
             "location": {
