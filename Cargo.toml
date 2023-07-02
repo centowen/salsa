@@ -4,6 +4,7 @@ members = [
     "frontend",
     "common"
 ]
+resolver = "2"
 
 [profile.dev]
 opt-level = 3 # Better optimisation for efficient FFT even in debug stage
