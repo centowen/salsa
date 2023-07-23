@@ -3,6 +3,37 @@ use std::io::prelude::*;
 use std::net::{TcpListener, TcpStream};
 use std::process;
 
+fn handle(request: &[u8]) -> [u8; 12] {
+    match request {
+        // Direction req
+        hex!("57 00 00 00"
+             "00 00 00 00"
+             "00 00 00 6F") => {
+            println!("Got direction request");
+            hex!("58 00 00 00"
+                 "00 00 00 00"
+                 "00 00 00 20")
+        }
+        // Stop req
+        hex!("57 00 00 00"
+             "00 00 00 00"
+             "00 00 00 0F") => {
+            println!("Got stop request");
+            // ACK
+            hex!("57 00 00 00"
+                 "00 00 00 00"
+                 "00 00 00 20")
+        }
+        _ => {
+            println!("Unknown request. Data: {:02X?}", request);
+            // FIXME: Is this a proper error
+            hex!("57 00 00 00"
+                 "00 00 00 00"
+                 "00 00 00 00")
+        }
+    }
+}
+
 fn controller_connection(mut stream: TcpStream) {
     loop {
         let mut command_buffer = [0; 13];
@@ -13,10 +44,9 @@ fn controller_connection(mut stream: TcpStream) {
             }
             Ok(13) => {
                 println!("Client sent: {:02X?}", command_buffer);
-                // FIXME: Send proper response based on sent command
-                println!("Sending ACK");
+                let response = handle(&command_buffer[0..12]);
                 // FIXME: Error handling
-                stream.write(&hex!("57000000000000000000000020")).unwrap();
+                stream.write(&response).unwrap();
             }
             Ok(n) => {
                 println!(
