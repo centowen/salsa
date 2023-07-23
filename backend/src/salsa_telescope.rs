@@ -43,7 +43,7 @@ fn parse_ack_response(
         Ok(TelescopeResponse::Ack)
     } else {
         Err(TelescopeError::TelescopeIOError(format!(
-            "Unexpected response to {} command: {:?}",
+            "Unexpected response to {} command: {:02X?}",
             command_name, bytes,
         )))
     }
@@ -62,7 +62,7 @@ fn parse_direction_response(
         }))
     } else {
         Err(TelescopeError::TelescopeIOError(format!(
-            "Unexpected response to {} command: {:?}",
+            "Unexpected response to {} command: {:02X?}",
             command_name, bytes,
         )))
     }
