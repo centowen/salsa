@@ -80,6 +80,7 @@ where
 ///
 /// Changes to the data in the returned database are never written to any
 /// file.
+#[allow(dead_code)]
 pub fn create_in_memory_database() -> DataBase<InMemoryStorage> {
     let store = InMemoryStorage { data: Vec::new() };
     DataBase::<InMemoryStorage> {
