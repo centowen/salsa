@@ -70,14 +70,12 @@ async fn main() {
     };
 
     warp::serve(routes).run((ip, 3000)).await;
-    {
-        let mut telescopes = telescopes.write().await;
-        for telescope in telescopes.values_mut() {
-            if let Some(service) = telescope.service.take() {
-                service
-                    .await
-                    .expect("Could not join telescope service at end of program");
-            }
-        }
+
+    // FIXME: This code is unreachable due to the above run() never returning.
+    for (_, telescope) in telescopes.write().await.drain() {
+        telescope
+            .service
+            .await
+            .expect("Could not join telescope service at end of program");
     }
 }

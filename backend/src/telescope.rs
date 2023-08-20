@@ -30,7 +30,7 @@ pub trait Telescope: Send + Sync {
 
 pub struct TelescopeContainer {
     pub telescope: Arc<Mutex<dyn Telescope>>,
-    pub service: Option<tokio::task::JoinHandle<()>>,
+    pub service: tokio::task::JoinHandle<()>,
 }
 
 pub type TelescopeCollection = Arc<RwLock<HashMap<String, TelescopeContainer>>>;
@@ -64,12 +64,9 @@ fn create_telescope(telescope_definition: common::TelescopeDefinition) -> Telesc
         ))),
     };
 
-    let service: Option<_> = if telescope_definition.enabled {
-        Some(start_telescope_service(telescope.clone()))
-    } else {
-        None
-    };
+    assert!(telescope_definition.enabled);
 
+    let service = start_telescope_service(telescope.clone());
     TelescopeContainer { telescope, service }
 }
 
@@ -83,6 +80,7 @@ where
 
     let telescopes: HashMap<_, _> = telescope_definitions
         .into_iter()
+        .filter(|telescope_definition| telescope_definition.enabled)
         .map(|telescope_definition| {
             (
                 telescope_definition.name.clone(),
