@@ -52,7 +52,8 @@ impl TelescopeTracker {
             Some(current_horizontal) => current_horizontal,
             None => return Err(TelescopeError::TelescopeNotConnected),
         };
-        let status = match self.commanded_horizontal() {
+        let commanded_horizontal = self.commanded_horizontal();
+        let status = match commanded_horizontal {
             Some(commanded_horizontal) => {
                 // Check if more than 2 tolerances off, if so we are not tracking anymore
                 if directions_are_close(commanded_horizontal, current_horizontal, 2.0) {
@@ -63,12 +64,16 @@ impl TelescopeTracker {
             }
             None => TelescopeStatus::Idle,
         };
+        let (target, most_recent_error) = {
+            let lock = self.state.lock().unwrap();
+            (lock.target, lock.most_recent_error.clone())
+        };
         Ok(TelescopeTrackerInfo {
-            target: self.state.lock().unwrap().target,
+            target,
             current_horizontal,
-            commanded_horizontal: self.commanded_horizontal(),
+            commanded_horizontal,
             status,
-            most_recent_error: self.state.lock().unwrap().most_recent_error.clone(),
+            most_recent_error,
         })
     }
 
