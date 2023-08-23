@@ -113,15 +113,16 @@ mod handlers {
 
     pub async fn get_telescopes(telescopes: TelescopeCollection) -> Result<impl Reply, Rejection> {
         let mut telescope_infos = Vec::<TelescopeInfo>::new();
-        {
-            let telescopes = telescopes.read().await;
-            for telescope in telescopes.values() {
-                let telescope = telescope.telescope.lock().await;
-                if let Ok(info) = telescope.get_info().await {
-                    telescope_infos.push(info);
-                }
+        for (name, telescope) in telescopes.read().await.iter() {
+            log::trace!("Checking {}", name);
+            let telescope = telescope.telescope.lock().await;
+            if let Ok(info) = telescope.get_info().await {
+                log::trace!("Accepted {}", name);
+                telescope_infos.push(info);
+            } else {
+                log::trace!("Rejected {}", name);
             }
-        };
+        }
         Ok(warp::reply::json(&telescope_infos))
     }
 
