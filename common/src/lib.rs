@@ -152,6 +152,8 @@ pub enum AddBookingError {
     // NonPositiveDuration - booking ends before it starts
 }
 
+pub type AddBookingResult = Result<u64, AddBookingError>;
+
 #[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
 pub struct Measurement {
     pub amps: Vec<f64>,

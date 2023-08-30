@@ -6,7 +6,7 @@ use axum::{
     routing::get,
     Router,
 };
-use common::{AddBookingError, Booking};
+use common::{AddBookingError, AddBookingResult, Booking};
 
 impl From<DataBaseError> for AddBookingError {
     fn from(_source: DataBaseError) -> Self {
@@ -31,10 +31,7 @@ where
     Json(data_model.bookings)
 }
 
-pub async fn add_booking(
-    db: DataBase<impl Storage>,
-    booking: Booking,
-) -> Result<u64, AddBookingError> {
+pub async fn add_booking(db: DataBase<impl Storage>, booking: Booking) -> AddBookingResult {
     if db
         .get_data()
         .await?
@@ -60,7 +57,7 @@ pub async fn add_booking(
 pub async fn add_booking_route(
     State(db): State<DataBase<impl Storage>>,
     Json(booking): Json<Booking>,
-) -> (StatusCode, Json<Result<u64, AddBookingError>>) {
+) -> (StatusCode, Json<AddBookingResult>) {
     let payload = add_booking(db, booking).await;
     let status_code = match payload {
         Ok(_) => StatusCode::CREATED,
