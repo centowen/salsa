@@ -32,7 +32,7 @@ pub async fn add_booking_payload(
     if db
         .get_data()
         .await
-        .unwrap()
+        .map_err(|_| AddBookingError::ServiceUnavailable)?
         .bookings
         .iter()
         .filter(|b| b.telescope_name == booking.telescope_name && b.overlaps(&booking))
