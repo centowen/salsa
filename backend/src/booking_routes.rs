@@ -3,7 +3,6 @@ use axum::{
     extract::{Json, State},
     http::StatusCode,
     response::IntoResponse,
-    response::Response,
     routing::get,
     Router,
 };
@@ -26,20 +25,10 @@ where
     Json(data_model.bookings)
 }
 
-// TODO: What to return and how?
-// These would be the convention for a REST API:
-// - 201 Created (payload: serialized created record)
-//   Successfully created booking
-// - 400 Bad Request (payload: serialized error reason enum)
-//   Incorrect data in request payload. E.g. end date earlier than start date
-// - 409 Conflict (payload: serialized error reason enum)
-//   Booking conflicts with an existing booking
-// - 503 Service Unavailable (payload: serialized error reason enum)
-//   E.g. Database unavailable
-pub async fn add_booking(
-    State(db): State<DataBase<impl Storage>>,
-    Json(booking): Json<Booking>,
-) -> Result<Json<Result<u64, AddBookingError>>, DataBaseError> {
+pub async fn add_booking_payload(
+    db: DataBase<impl Storage>,
+    booking: Booking,
+) -> Result<u64, AddBookingError> {
     if db
         .get_data()
         .await
@@ -61,13 +50,25 @@ pub async fn add_booking(
     .await
     .map_err(|_| AddBookingError::ServiceUnavailable)?;
 
-    Ok(Json(
-        db.get_data()
-            .await
-            .map_err(|_| AddBookingError::ServiceUnavailable)?
-            .bookings
-            .len() as u64,
-    ))
+    Ok(db
+        .get_data()
+        .await
+        .map_err(|_| AddBookingError::ServiceUnavailable)?
+        .bookings
+        .len() as u64)
+}
+
+pub async fn add_booking(
+    State(db): State<DataBase<impl Storage>>,
+    Json(booking): Json<Booking>,
+) -> (StatusCode, Json<Result<u64, AddBookingError>>) {
+    let payload = add_booking_payload(db, booking).await;
+    let status_code = match payload {
+        Ok(_) => StatusCode::CREATED,
+        Err(AddBookingError::Conflict) => StatusCode::CONFLICT,
+        Err(AddBookingError::ServiceUnavailable) => StatusCode::SERVICE_UNAVAILABLE,
+    };
+    (status_code, Json(payload))
 }
 
 #[cfg(test)]

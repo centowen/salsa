@@ -1,5 +1,5 @@
 use chrono::{Datelike, Duration, Months, NaiveDate, NaiveTime, TimeZone, Utc, Weekday};
-use common::{Booking, TelescopeInfo};
+use common::{AddBookingError, Booking, TelescopeInfo};
 use gloo_net::http::Request;
 use web_sys::HtmlInputElement;
 use yew::html;
@@ -284,15 +284,15 @@ pub fn make_booking_page() -> Html {
                 {
                     Ok(response) => {
                         log::info!("Got response: {:?}", response);
-                        let res = response.json::<Result<Json<u64>, AddBookingError>>().await;
-                        match res {
-                            Ok(_value) => emit_booking_success(),
-                            Err(error) => emit_booking_error(error),
+                        let response = response.json::<Result<u64, AddBookingError>>().await;
+                        match response {
+                            Err(error) => log::error!("Deserialization failed: {:?}", error),
+                            Ok(Err(error)) => log::error!("Response contained error: {:?}", error),
+                            Ok(Ok(value)) => log::info!("Success: {:?}", value),
                         }
-                        log::info!("Got response value: {:?}", value);
                     }
                     Err(error) => {
-                        log::error!("Failed to fetch: {}", error);
+                        log::error!("Fetch failed: {}", error);
                     }
                 }
             });
