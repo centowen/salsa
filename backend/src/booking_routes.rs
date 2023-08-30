@@ -1,4 +1,4 @@
-use crate::database::{DataBase, Storage};
+use crate::database::{DataBase, DataBaseError, Storage};
 use axum::{
     extract::{Json, State},
     http::StatusCode,
@@ -7,6 +7,12 @@ use axum::{
     Router,
 };
 use common::{AddBookingError, Booking};
+
+impl From<DataBaseError> for AddBookingError {
+    fn from(_source: DataBaseError) -> Self {
+        Self::ServiceUnavailable
+    }
+}
 
 pub fn routes(database: DataBase<impl Storage + 'static>) -> Router {
     Router::new()
@@ -31,8 +37,7 @@ pub async fn add_booking(
 ) -> Result<u64, AddBookingError> {
     if db
         .get_data()
-        .await
-        .map_err(|_| AddBookingError::ServiceUnavailable)?
+        .await?
         .bookings
         .iter()
         .filter(|b| b.telescope_name == booking.telescope_name && b.overlaps(&booking))
@@ -47,15 +52,9 @@ pub async fn add_booking(
         data_model.bookings.push(booking);
         data_model
     })
-    .await
-    .map_err(|_| AddBookingError::ServiceUnavailable)?;
+    .await?;
 
-    Ok(db
-        .get_data()
-        .await
-        .map_err(|_| AddBookingError::ServiceUnavailable)?
-        .bookings
-        .len() as u64)
+    Ok(db.get_data().await?.bookings.len() as u64)
 }
 
 pub async fn add_booking_route(
