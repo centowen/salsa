@@ -3,10 +3,11 @@ use axum::{
     extract::{Json, State},
     http::StatusCode,
     response::IntoResponse,
+    response::Response,
     routing::get,
     Router,
 };
-use common::Booking;
+use common::{AddBookingError, Booking};
 
 pub fn routes(database: DataBase<impl Storage + 'static>) -> Router {
     Router::new()
@@ -25,33 +26,48 @@ where
     Json(data_model.bookings)
 }
 
+// TODO: What to return and how?
+// These would be the convention for a REST API:
+// - 201 Created (payload: serialized created record)
+//   Successfully created booking
+// - 400 Bad Request (payload: serialized error reason enum)
+//   Incorrect data in request payload. E.g. end date earlier than start date
+// - 409 Conflict (payload: serialized error reason enum)
+//   Booking conflicts with an existing booking
+// - 503 Service Unavailable (payload: serialized error reason enum)
+//   E.g. Database unavailable
 pub async fn add_booking(
     State(db): State<DataBase<impl Storage>>,
     Json(booking): Json<Booking>,
-) -> (StatusCode, String) {
-    let res = db
-        .update_data(|mut data_model| {
-            data_model.bookings.push(booking);
-            data_model
-        })
-        .await;
-    match res {
-        Ok(_) => (
-            StatusCode::CREATED,
-            db.get_data()
-                .await
-                .expect(
-                    "As long as no one is manually editing the database, this should never fail.",
-                )
-                .bookings
-                .len()
-                .to_string(),
-        ),
-        Err(_) => (
-            StatusCode::SERVICE_UNAVAILABLE,
-            "Database unavailable".to_string(),
-        ),
+) -> Result<Json<Result<u64, AddBookingError>>, DataBaseError> {
+    if db
+        .get_data()
+        .await
+        .unwrap()
+        .bookings
+        .iter()
+        .filter(|b| b.telescope_name == booking.telescope_name && b.overlaps(&booking))
+        .any(|_| true)
+    {
+        // There is already a booking of the selected telescope overlapping
+        // with the new booking. The new booking must be rejected.
+        return Err(AddBookingError::Conflict);
     }
+
+    db.update_data(|mut data_model| {
+        data_model.bookings.push(booking);
+        data_model
+    })
+    .await
+    .map_err(|_| AddBookingError::ServiceUnavailable)?;
+
+    Ok(Json(
+        db.get_data()
+            .await
+            .map_err(|_| AddBookingError::ServiceUnavailable)?
+            .bookings
+            .len() as u64,
+    ))
 }
 
 #[cfg(test)]

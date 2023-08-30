@@ -284,10 +284,11 @@ pub fn make_booking_page() -> Html {
                 {
                     Ok(response) => {
                         log::info!("Got response: {:?}", response);
-                        let value = response
-                            .json::<usize>()
-                            .await
-                            .expect("Failed to deserialize response");
+                        let res = response.json::<Result<Json<u64>, AddBookingError>>().await;
+                        match res {
+                            Ok(_value) => emit_booking_success(),
+                            Err(error) => emit_booking_error(error),
+                        }
                         log::info!("Got response value: {:?}", value);
                     }
                     Err(error) => {

@@ -138,6 +138,20 @@ pub struct Booking {
     pub user_name: String,
 }
 
+impl Booking {
+    pub fn overlaps(&self, other: &Booking) -> bool {
+        self.end_time >= other.start_time && self.start_time <= other.end_time
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub enum AddBookingError {
+    ServiceUnavailable,
+    Conflict,
+    // NotFuture - booking is entirely(?) in the past
+    // NonPositiveDuration - booking ends before it starts
+}
+
 #[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
 pub struct Measurement {
     pub amps: Vec<f64>,
