@@ -10,7 +10,7 @@ use common::{AddBookingError, Booking};
 
 pub fn routes(database: DataBase<impl Storage + 'static>) -> Router {
     Router::new()
-        .route("/", get(get_bookings).post(add_booking))
+        .route("/", get(get_bookings).post(add_booking_route))
         .with_state(database)
 }
 
@@ -25,7 +25,7 @@ where
     Json(data_model.bookings)
 }
 
-pub async fn add_booking_payload(
+pub async fn add_booking(
     db: DataBase<impl Storage>,
     booking: Booking,
 ) -> Result<u64, AddBookingError> {
@@ -58,11 +58,11 @@ pub async fn add_booking_payload(
         .len() as u64)
 }
 
-pub async fn add_booking(
+pub async fn add_booking_route(
     State(db): State<DataBase<impl Storage>>,
     Json(booking): Json<Booking>,
 ) -> (StatusCode, Json<Result<u64, AddBookingError>>) {
-    let payload = add_booking_payload(db, booking).await;
+    let payload = add_booking(db, booking).await;
     let status_code = match payload {
         Ok(_) => StatusCode::CREATED,
         Err(AddBookingError::Conflict) => StatusCode::CONFLICT,
