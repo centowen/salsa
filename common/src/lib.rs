@@ -144,7 +144,7 @@ impl Booking {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub enum AddBookingError {
     ServiceUnavailable,
     Conflict,

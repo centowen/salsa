@@ -141,7 +141,8 @@ mod test {
 
         assert_eq!(response.status(), StatusCode::CREATED);
         let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
-        assert_eq!(body, "1"); // 1 because the database is empty before the request
+        let res: AddBookingResult = serde_json::from_slice(&body).unwrap();
+        assert_eq!(res, Ok(1)); // 1 because the database is empty before the request
 
         assert_eq!(
             vec![booking],
