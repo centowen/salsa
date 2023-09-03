@@ -276,26 +276,25 @@ pub fn make_booking_page() -> Html {
             };
 
             spawn_local(async move {
-                let Ok(response) = Request::post("/api/bookings")
+                match Request::post("/api/bookings")
                     .json::<Booking>(&booking)
                     .unwrap()
                     .send()
                     .await
-                else {
-                    log::error!("Fetch failed!");
-                    return
-                };
-                log::info!("Got response: {:?}", response);
-                let response = response.json::<AddBookingResult>().await;
-                let Ok(response) = response else {
-                        log::error!("Deserialization failed!");
-                        return
-                    };
-                let Ok(value) = response else {
-                        log::error!("Response contained error!");
-                        return
-                    };
-                log::info!("Success: {:?}", value);
+                {
+                    Ok(response) => {
+                        log::info!("Got response: {:?}", response);
+                        let response = response.json::<AddBookingResult>().await;
+                        match response {
+                            Err(error) => log::error!("Deserialization failed: {:?}", error),
+                            Ok(Err(error)) => log::error!("Response contained error: {:?}", error),
+                            Ok(Ok(value)) => log::info!("Success: {:?}", value),
+                        }
+                    }
+                    Err(error) => {
+                        log::error!("Fetch failed: {}", error);
+                    }
+                }
             });
         })
     };
