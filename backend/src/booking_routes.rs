@@ -1,4 +1,4 @@
-use crate::database::{DataBase, Storage};
+use crate::database::{DataBase, DataBaseError, Storage};
 use axum::{
     extract::{Json, State},
     http::StatusCode,
@@ -6,11 +6,17 @@ use axum::{
     routing::get,
     Router,
 };
-use common::Booking;
+use common::{AddBookingError, AddBookingResult, Booking};
+
+impl From<DataBaseError> for AddBookingError {
+    fn from(_source: DataBaseError) -> Self {
+        Self::ServiceUnavailable
+    }
+}
 
 pub fn routes(database: DataBase<impl Storage + 'static>) -> Router {
     Router::new()
-        .route("/", get(get_bookings).post(add_booking))
+        .route("/", get(get_bookings).post(add_booking_route))
         .with_state(database)
 }
 
@@ -25,33 +31,40 @@ where
     Json(data_model.bookings)
 }
 
-pub async fn add_booking(
+pub async fn add_booking(db: DataBase<impl Storage>, booking: Booking) -> AddBookingResult {
+    if db
+        .get_data()
+        .await?
+        .bookings
+        .iter()
+        .filter(|b| b.telescope_name == booking.telescope_name && b.overlaps(&booking))
+        .any(|_| true)
+    {
+        // There is already a booking of the selected telescope overlapping
+        // with the new booking. The new booking must be rejected.
+        return Err(AddBookingError::Conflict);
+    }
+
+    db.update_data(|mut data_model| {
+        data_model.bookings.push(booking);
+        data_model
+    })
+    .await?;
+
+    Ok(db.get_data().await?.bookings.len() as u64)
+}
+
+pub async fn add_booking_route(
     State(db): State<DataBase<impl Storage>>,
     Json(booking): Json<Booking>,
-) -> (StatusCode, String) {
-    let res = db
-        .update_data(|mut data_model| {
-            data_model.bookings.push(booking);
-            data_model
-        })
-        .await;
-    match res {
-        Ok(_) => (
-            StatusCode::CREATED,
-            db.get_data()
-                .await
-                .expect(
-                    "As long as no one is manually editing the database, this should never fail.",
-                )
-                .bookings
-                .len()
-                .to_string(),
-        ),
-        Err(_) => (
-            StatusCode::SERVICE_UNAVAILABLE,
-            "Database unavailable".to_string(),
-        ),
-    }
+) -> (StatusCode, Json<AddBookingResult>) {
+    let payload = add_booking(db, booking).await;
+    let status_code = match payload {
+        Ok(_) => StatusCode::CREATED,
+        Err(AddBookingError::Conflict) => StatusCode::CONFLICT,
+        Err(AddBookingError::ServiceUnavailable) => StatusCode::SERVICE_UNAVAILABLE,
+    };
+    (status_code, Json(payload))
 }
 
 #[cfg(test)]
@@ -128,7 +141,8 @@ mod test {
 
         assert_eq!(response.status(), StatusCode::CREATED);
         let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
-        assert_eq!(body, "1"); // 1 because the database is empty before the request
+        let res: AddBookingResult = serde_json::from_slice(&body).unwrap();
+        assert_eq!(res, Ok(1)); // 1 because the database is empty before the request
 
         assert_eq!(
             vec![booking],
