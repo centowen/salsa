@@ -61,7 +61,7 @@ impl Component for BookingsPage {
             })
             .collect::<Html>();
         html! {
-            <div>
+            <div class="section light">
                 <div class="bookings">
                     { bookings }
                 </div>

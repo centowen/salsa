@@ -61,7 +61,7 @@ impl Component for ObservePage {
             })
             .collect::<Html>();
         html! {
-            <div class="select-telescope">
+            <div class="section light select-telescope">
                 { telescopes}
             </div>
         }

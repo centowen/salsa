@@ -1,44 +1,15 @@
 use yew::prelude::*;
-use yew::{html, Context};
-use yew_router::prelude::*;
 
-use crate::Route;
-
-pub enum Msg {}
-
-pub struct WelcomePage {}
-
-impl Component for WelcomePage {
-    type Message = Msg;
-    type Properties = ();
-
-    fn create(_ctx: &Context<Self>) -> Self {
-        Self {}
-    }
-
-    fn update(&mut self, _ctx: &Context<Self>, _msg: Self::Message) -> bool {
-        true
-    }
-
-    fn view(&self, _ctx: &Context<Self>) -> Html {
-        html! {
-            <div class="welcome">
-                <div class="list-entry">
-                    {"Welcome"}
-                </div>
-                <div class="list-entry">
-                    <Link<Route> to={Route::Observe}>{ "Observe" }</Link<Route>>
-                </div>
-                <div class="list-entry">
-                    <Link<Route> to={Route::Bookings}>{ "Bookings" }</Link<Route>>
-                </div>
-                <div class="list-entry">
-                    <Link<Route> to={Route::MakeBooking}>{ "Make booking" }</Link<Route>>
-                </div>
-                <div class="list-entry">
-                    <Link<Route> to={Route::Weather}>{ "Weather information" }</Link<Route>>
-                </div>
-            </div>
-        }
+#[function_component(WelcomePage)]
+pub fn welcome_page() -> Html {
+    html! {
+        <div class="section dark welcome">
+            // <h1>{ "Observe the Milky Way" }</h1>
+            <h1>{ "Radio astronomy in your browser" }</h1>
+            <div><p>{ "The Salsa telescopes are available right here in your
+            browser. Do real radio observations of our home, the Milky Way."
+            }</p></div>
+            // "Try it now!" Button which leads to the observation page?
+        </div>
     }
 }

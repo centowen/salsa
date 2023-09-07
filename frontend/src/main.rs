@@ -8,6 +8,7 @@ mod pages;
 mod services;
 
 use common::TelescopeTarget;
+use components::navbar::NavBar;
 use pages::bookings::BookingsPage;
 use pages::make_booking::MakeBookingPage;
 use pages::observe::ObservePage;
@@ -78,9 +79,18 @@ impl Component for Salsa {
 
     fn view(&self, _ctx: &Context<Self>) -> Html {
         html! {
-            <BrowserRouter>
-                <Switch<Route> render={switch} />
-            </BrowserRouter>
+            <div id="page">
+                <BrowserRouter>
+                    <header>
+                        <div id="logo"><Link<Route> to={Route::Home}>{"SALSA"}</Link<Route>></div>
+                        <NavBar />
+                    </header>
+                    <Switch<Route> render={switch} />
+                    <footer>
+                        { "Made by weirdos 🦆" }
+                    </footer>
+                </BrowserRouter>
+            </div>
         }
     }
 }
