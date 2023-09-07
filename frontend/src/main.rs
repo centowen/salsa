@@ -10,10 +10,10 @@ mod services;
 use common::TelescopeTarget;
 use pages::bookings::BookingsPage;
 use pages::make_booking::MakeBookingPage;
+use pages::navbar::NavBar;
 use pages::observe::ObservePage;
 use pages::telescope::TelescopePage;
 use pages::weather::WeatherPage;
-use pages::welcome::WelcomePage;
 use yew::prelude::*;
 use yew::{html, Context};
 use yew_router::prelude::*;
@@ -44,7 +44,7 @@ pub enum Route {
 fn switch(routes: Route) -> Html {
     match routes {
         Route::Home => html! {
-            <WelcomePage />
+            <div></div>
         },
         Route::Weather => html! {
             <WeatherPage />
@@ -78,9 +78,18 @@ impl Component for Salsa {
 
     fn view(&self, _ctx: &Context<Self>) -> Html {
         html! {
-            <BrowserRouter>
-                <Switch<Route> render={switch} />
-            </BrowserRouter>
+            <div id="page">
+                <BrowserRouter>
+                    <header class="section">
+                        <div id="logo">{"SALSA"}</div>
+                        <NavBar />
+                        <div id="login">{"Login"}</div>
+                    </header>
+                    <div id="main-content" class="section">
+                        <Switch<Route> render={switch} />
+                    </div>
+                </BrowserRouter>
+            </div>
         }
     }
 }

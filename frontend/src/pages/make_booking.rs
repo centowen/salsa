@@ -365,7 +365,9 @@ pub fn make_booking_page() -> Html {
                         <option value={ t.to_string() }>{ t }</option>
                     }).collect::<Html>() }
                 </select>
-                <input type="submit" value="Book telescope" />
+                <div>
+                    <input type="submit" value="Book telescope" />
+                </div>
             </form>
         </div>
     )

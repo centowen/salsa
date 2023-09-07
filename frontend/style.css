@@ -1,5 +1,107 @@
-a {
-    color: black;
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+:root {
+    --primary-color: #02344a;
+    --primary-color-light: #25617a;
+    --secondary-color: #ffffff;
+    --gray100: #f0f5f7;
+    --gray300: #d6e1e5;
+    --gray900: #1a1d1f;
+    --main-text-color: var(--gray900);
+    --main-link-color: var(--primary-color);
+    --main-bg-color: var(--gray100);
+}
+
+body {
+    font-family: 'Roboto flex', sans-serif;
+    font-size: 16px;
+    background-color: var(--gray900);
+}
+
+#page {
+    display: flex;
+    flex-wrap: wrap;
+    width: 960px;
+    margin: 0 auto;
+}
+
+#main-content {
+    padding: 20px;
+    color: var(--main-text-color);
+    background-color: var(--main-bg-color);
+}
+
+#main-content a {
+    color: var(--main-link-color);
+    text-decoration: none;
+}
+
+#main-content a:hover {
+    text-decoration: underline;
+}
+
+.section {
+    width: 100%;
+    display: flex;
+    align-items: center;
+}
+
+header {
+    color: var(--gray100);
+    background-color: var(--primary-color);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-direction: row;
+}
+
+#logo {
+    color: var(--secondary-color);
+    font-size: 36px;
+    font-family: 'Audiowide', cursive;
+    margin: 0 20px;
+    height: 50px;
+    display: flex;
+    align-items:center;
+    justify-content:center;
+}
+
+nav menu {
+    height: 50px;
+    display: flex;
+    align-items: center;
+    list-style: none;
+    padding: 0;
+    justify-content: center;
+    font-weight: 400;
+}
+
+nav menu li {
+    flex-grow: 1;
+    padding: 0px 20px;
+    height: 100%;
+}
+
+nav menu li:hover {
+    background-color: var(--primary-color-light);
+}
+
+nav menu li a {
+    color: inherit;
+    font-size: 16px;
+    text-decoration: none;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#login {
+    margin: 0 20px;
 }
 
 .telescope-receiver {
@@ -16,9 +118,10 @@ a {
 }
 
 .notification-area {
-    padding: 8px;
-    margin-bottom: 6px;
+    padding: 10px;
+    margin-bottom: 10px;
     display: none;
+    border: 1px solid;
 }
 
 .notification-area.success {
@@ -45,6 +148,6 @@ a {
     border-radius: 6px;
     background-color: #c0d0ee;
 }
-.calendar .other-month a {
+#main-content .calendar .other-month a {
     color: #999999;
 }
