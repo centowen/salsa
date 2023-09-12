@@ -80,7 +80,7 @@ impl Component for Salsa {
         html! {
             <div id="page">
                 <BrowserRouter>
-                    <header class="section">
+                    <header>
                         <div id="logo">{"SALSA"}</div>
                         <NavBar />
                         <div id="login">{"Login"}</div>
