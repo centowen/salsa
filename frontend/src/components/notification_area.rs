@@ -7,10 +7,6 @@ pub struct NotificationAreaProps {
 }
 
 impl NotificationAreaProps {
-    pub fn empty() -> Self {
-        Self::message("")
-    }
-
     pub fn with_level(message: &str, level: NotificationLevel) -> Self {
         Self {
             message: message.to_owned(),
@@ -18,16 +14,12 @@ impl NotificationAreaProps {
         }
     }
 
-    pub fn message(message: &str) -> Self {
-        Self::with_level(message, NotificationLevel::Message)
+    pub fn empty() -> Self {
+        Self::with_level("", NotificationLevel::None)
     }
 
     pub fn success(message: &str) -> Self {
         Self::with_level(message, NotificationLevel::Success)
-    }
-
-    pub fn warning(message: &str) -> Self {
-        Self::with_level(message, NotificationLevel::Warning)
     }
 
     pub fn error(message: &str) -> Self {
@@ -37,9 +29,8 @@ impl NotificationAreaProps {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum NotificationLevel {
-    Message,
+    None,
     Success,
-    Warning,
     Error,
 }
 
@@ -47,10 +38,9 @@ pub enum NotificationLevel {
 pub fn notification_area(props: &NotificationAreaProps) -> Html {
     let NotificationAreaProps { message, level } = props.clone();
     let level_class = match level {
-        NotificationLevel::Message => "message",
-        NotificationLevel::Success => "success",
-        NotificationLevel::Warning => "warning",
-        NotificationLevel::Error => "error",
+        NotificationLevel::None => None,
+        NotificationLevel::Success => Some("success"),
+        NotificationLevel::Error => Some("error"),
     };
 
     html! {

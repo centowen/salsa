@@ -1,6 +1,4 @@
-use crate::components::notification_area::{
-    NotificationArea, NotificationAreaProps, NotificationLevel,
-};
+use crate::components::notification_area::{NotificationArea, NotificationAreaProps};
 use chrono::{Datelike, Duration, Months, NaiveDate, NaiveTime, TimeZone, Utc, Weekday};
 use common::{AddBookingError, AddBookingResult, Booking, TelescopeInfo};
 use gloo_net::http::{Method, Request};
@@ -316,7 +314,7 @@ pub fn make_booking_page() -> Html {
                             notifications.set(NotificationAreaProps::error("Booking conflict!"))
                         }
 
-                        Ok(value) => {
+                        Ok(_value) => {
                             notifications.set(NotificationAreaProps::success("Booking made!"))
                         }
                     }
