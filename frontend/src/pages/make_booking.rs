@@ -79,9 +79,9 @@ fn calendar(props: &CalendarProps) -> Html {
     html! {
         <div class="calendar">
             <div class="month">
-                <a href="#" onclick={ prev_month }>{ "<" }</a>
+                <button class="change-month" onclick={ prev_month }>{ "<" }</button>
                 { month }
-                <a href="#" onclick={ next_month }>{ ">" }</a>
+                <button class="change-month" onclick={ next_month }>{ ">" }</button>
             </div>
             <table>
             <tr>
@@ -355,17 +355,23 @@ pub fn make_booking_page() -> Html {
         <div class="new-booking">
             <NotificationArea message={message} level={level} />
             <form id="new-booking-form" method="get" onsubmit={ onclick }>
-                <Calendar date={ *current_date } callback={ change_date }/>
-                <TimePicker time={ *current_time } callback={ change_time }/>
-                <DurationInput duration={ *current_duration } callback={ change_duration }/>
-                <label for="telescope">{ "Telescope" }</label>
-                <select name="telescope" ref={ telescope_ref } id="telescope">
-                    <option value="">{ "Any telescope" }</option>
-                    { telescope_names.iter().map(|t| html!{
-                        <option value={ t.to_string() }>{ t }</option>
-                    }).collect::<Html>() }
-                </select>
-                <div>
+                <div id="new-booking-cols">
+                    <div class="new-booking-col">
+                        <Calendar date={ *current_date } callback={ change_date }/>
+                    </div>
+                    <div class="new-booking-col">
+                        <TimePicker time={ *current_time } callback={ change_time }/>
+                        <DurationInput duration={ *current_duration } callback={ change_duration }/>
+                        <label for="telescope">{ "Telescope" }</label>
+                        <select name="telescope" ref={ telescope_ref } id="telescope">
+                            <option value="">{ "Any telescope" }</option>
+                            { telescope_names.iter().map(|t| html!{
+                                <option value={ t.to_string() }>{ t }</option>
+                            }).collect::<Html>() }
+                        </select>
+                    </div>
+                </div>
+                <div class="submit">
                     <input type="submit" value="Book telescope" />
                 </div>
             </form>
