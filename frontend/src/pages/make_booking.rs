@@ -1,6 +1,7 @@
+use crate::components::notification_area::{NotificationArea, NotificationAreaProps};
 use chrono::{Datelike, Duration, Months, NaiveDate, NaiveTime, TimeZone, Utc, Weekday};
 use common::{AddBookingError, AddBookingResult, Booking, TelescopeInfo};
-use gloo_net::http::Request;
+use gloo_net::http::{Method, Request};
 use web_sys::HtmlInputElement;
 use yew::html;
 use yew::platform::spawn_local;
@@ -214,15 +215,40 @@ fn value_from_ref(node_ref: &NodeRef) -> Option<String> {
     node_ref.cast::<HtmlInputElement>().map(|e| e.value())
 }
 
+async fn fetch<D, R>(data: D, endpoint: &str, method: Method) -> Result<R, gloo_net::Error>
+where
+    D: serde::Serialize,
+    R: serde::de::DeserializeOwned,
+{
+    let response = Request::new(endpoint)
+        .method(method)
+        .json::<D>(&data)?
+        .send()
+        .await?;
+    Ok(response.json::<R>().await?)
+}
+
+async fn fetch_add_booking_endpoint(booking: Booking) -> AddBookingResult {
+    match fetch(booking, "/api/bookings", Method::POST).await {
+        Ok(value) => value,
+        Err(error) => {
+            log::error!("fetch error: {:?}", error);
+            Err(AddBookingError::ServiceUnavailable)
+        }
+    }
+}
+
 #[function_component(MakeBookingPage)]
 pub fn make_booking_page() -> Html {
     let default_date = NaiveDate::from_ymd_opt(2023, 04, 19).unwrap();
     let default_time = NaiveTime::from_hms_opt(12, 0, 0).unwrap();
     let default_duration = Duration::hours(1);
+    let default_notifications = NotificationAreaProps::empty();
 
     let current_date = use_state(|| default_date);
     let current_time = use_state(|| default_time);
     let current_duration = use_state(|| default_duration);
+    let notifications = use_state(|| default_notifications);
 
     let telescope_ref = use_node_ref();
 
@@ -251,6 +277,7 @@ pub fn make_booking_page() -> Html {
     };
 
     let onclick = {
+        let notifications = notifications.clone();
         let telescope_ref = telescope_ref.clone();
         let current_date = current_date.clone();
         let current_time = current_time.clone();
@@ -275,24 +302,21 @@ pub fn make_booking_page() -> Html {
                 user_name: "Anonymous".to_string(),
             };
 
-            spawn_local(async move {
-                match Request::post("/api/bookings")
-                    .json::<Booking>(&booking)
-                    .unwrap()
-                    .send()
-                    .await
-                {
-                    Ok(response) => {
-                        log::info!("Got response: {:?}", response);
-                        let response = response.json::<AddBookingResult>().await;
-                        match response {
-                            Err(error) => log::error!("Deserialization failed: {:?}", error),
-                            Ok(Err(error)) => log::error!("Response contained error: {:?}", error),
-                            Ok(Ok(value)) => log::info!("Success: {:?}", value),
+            spawn_local({
+                let notifications = notifications.clone();
+                async move {
+                    let result = fetch_add_booking_endpoint(booking).await;
+                    match result {
+                        Err(AddBookingError::ServiceUnavailable) => notifications.set(
+                            NotificationAreaProps::error("Unable to contact booking server!"),
+                        ),
+                        Err(AddBookingError::Conflict) => {
+                            notifications.set(NotificationAreaProps::error("Booking conflict!"))
                         }
-                    }
-                    Err(error) => {
-                        log::error!("Fetch failed: {}", error);
+
+                        Ok(_value) => {
+                            notifications.set(NotificationAreaProps::success("Booking made!"))
+                        }
                     }
                 }
             });
@@ -326,8 +350,10 @@ pub fn make_booking_page() -> Html {
     );
 
     // TODO Labels? Or icons?
+    let NotificationAreaProps { message, level } = (*notifications).clone();
     html!(
         <div class="new-booking">
+            <NotificationArea message={message} level={level} />
             <form id="new-booking-form" method="get" onsubmit={ onclick }>
                 <Calendar date={ *current_date } callback={ change_date }/>
                 <TimePicker time={ *current_time } callback={ change_time }/>
@@ -339,7 +365,7 @@ pub fn make_booking_page() -> Html {
                         <option value={ t.to_string() }>{ t }</option>
                     }).collect::<Html>() }
                 </select>
-                <input type="submit" value="Submit" />
+                <input type="submit" value="Book telescope" />
             </form>
         </div>
     )
