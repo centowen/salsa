@@ -15,6 +15,24 @@ a {
     width: 100%;
 }
 
+.notification-area {
+    padding: 8px;
+    margin-bottom: 6px;
+    display: none;
+}
+
+.notification-area.success {
+    border-color: #66BB6A;
+    background-color: #E8F5E9;
+    display: block;
+}
+
+.notification-area.error {
+    border-color: #E57373;
+    background-color: #FFEBEE;
+    display: block;
+}
+
 .calendar .date {
     font-size: 90%;
     padding: 6px;
