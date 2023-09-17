@@ -8,9 +8,9 @@ mod pages;
 mod services;
 
 use common::TelescopeTarget;
+use components::navbar::NavBar;
 use pages::bookings::BookingsPage;
 use pages::make_booking::MakeBookingPage;
-use pages::navbar::NavBar;
 use pages::observe::ObservePage;
 use pages::telescope::TelescopePage;
 use pages::weather::WeatherPage;
