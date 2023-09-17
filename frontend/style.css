@@ -114,6 +114,13 @@ nav menu li a {
     margin: 0 20px;
 }
 
+footer {
+    /* TODO: Need less contrast here */
+    color: var(--gray300);
+    padding: 20px;
+    text-align: center;
+}
+
 .telescope-receiver {
     border: 1px solid black;
     margin: 4px;

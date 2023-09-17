@@ -87,6 +87,9 @@ impl Component for Salsa {
                     <div id="main-content" class="section">
                         <Switch<Route> render={switch} />
                     </div>
+                    <footer>
+                        { "Made by weirdos 🦆" }
+                    </footer>
                 </BrowserRouter>
             </div>
         }
