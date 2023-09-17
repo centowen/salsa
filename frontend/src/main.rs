@@ -83,7 +83,6 @@ impl Component for Salsa {
                     <header>
                         <div id="logo">{"SALSA"}</div>
                         <NavBar />
-                        <div id="login">{"Login"}</div>
                     </header>
                     <div id="main-content" class="section">
                         <Switch<Route> render={switch} />
