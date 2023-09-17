@@ -61,6 +61,10 @@ body {
     text-decoration: underline;
 }
 
+.welcome {
+    text-align: center;
+}
+
 header {
     color: var(--gray100);
     background-color: var(--primary-color);
