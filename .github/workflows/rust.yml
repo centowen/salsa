@@ -17,7 +17,7 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - name: Install libuhd
-      run: sudo apt-get install -y libuhd-dev
+      run: sudo apt-get update && sudo apt-get install -y libuhd-dev
     - name: Build
       run: cargo build --verbose
     - name: Run tests
