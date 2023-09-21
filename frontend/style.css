@@ -141,6 +141,7 @@ footer {
     color: var(--gray300);
     padding: 20px;
     text-align: center;
+    font-size: 90%;
 }
 
 .telescope-receiver {
