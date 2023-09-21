@@ -97,6 +97,10 @@ header {
     align-items:center;
     justify-content:center;
 }
+#logo a {
+    color: inherit;
+    text-decoration: none;
+}
 
 nav menu {
     height: 100%;
