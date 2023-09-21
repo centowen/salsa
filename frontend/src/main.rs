@@ -85,9 +85,7 @@ impl Component for Salsa {
                         <div id="logo">{"SALSA"}</div>
                         <NavBar />
                     </header>
-                    <div id="main-content" class="section">
-                        <Switch<Route> render={switch} />
-                    </div>
+                    <Switch<Route> render={switch} />
                     <footer>
                         { "Made by weirdos 🦆" }
                     </footer>

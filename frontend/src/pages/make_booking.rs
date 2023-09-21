@@ -349,10 +349,9 @@ pub fn make_booking_page() -> Html {
         (),
     );
 
-    // TODO Labels? Or icons?
     let NotificationAreaProps { message, level } = (*notifications).clone();
     html!(
-        <div class="new-booking">
+        <div class="section light new-booking">
             <NotificationArea message={message} level={level} />
             <form id="new-booking-form" method="get" onsubmit={ onclick }>
                 <div id="new-booking-cols">

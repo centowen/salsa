@@ -32,7 +32,7 @@ impl Component for WeatherPage {
     fn view(&self, _ctx: &Context<Self>) -> Html {
         let temperature = self.temperature.as_deref().unwrap_or("Loading...");
         html! {
-            <div class="temperature">
+            <div class="section light temperature">
                 {format!("{}°C", temperature)}
             </div>
         }

@@ -45,24 +45,38 @@ body {
     }
 }
 
-#main-content {
+.section {
     padding: 30px;
-    color: var(--main-text-color);
-    background-color: var(--main-bg-color);
     flex-grow: 1;
 }
-
-#main-content a {
+.section.light {
+    color: var(--main-text-color);
+    background-color: var(--main-bg-color);
+}
+.section.dark {
+    color: var(--secondary-color);
+}
+.section a {
     color: var(--main-link-color);
     text-decoration: none;
 }
-
-#main-content a:hover {
+.section a:hover {
     text-decoration: underline;
 }
 
 .welcome {
     text-align: center;
+    padding-top: 150px;
+}
+.welcome h1 {
+    font-size: 300%;
+    letter-spacing: -0.7px;
+    margin-bottom: 30px;
+}
+.welcome p {
+    font-size: 140%;
+    width: 50%;
+    margin: auto;
 }
 
 header {
@@ -204,6 +218,6 @@ footer {
     border-radius: 6px;
     background-color: #c0d0ee;
 }
-#main-content .calendar .other-month a {
+.calendar .other-month a {
     color: #999999;
 }

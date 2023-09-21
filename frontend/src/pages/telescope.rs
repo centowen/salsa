@@ -299,7 +299,7 @@ impl Component for TelescopePage {
         };
 
         html! {
-            <div class="telescope">
+            <div class="section light telescope">
                 <div class="telescope-name">
                     <h1>{ ctx.props().id.clone() }</h1>
                 </div>
