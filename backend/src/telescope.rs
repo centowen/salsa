@@ -11,6 +11,7 @@ pub struct FakeTelescope {
     pub target: TelescopeTarget,
     pub horizontal: Direction,
     pub location: Location,
+    pub most_recent_error: Option<TelescopeError>,
 }
 
 const PARKING_HORIZONTAL: Direction = Direction {
@@ -19,6 +20,7 @@ const PARKING_HORIZONTAL: Direction = Direction {
 };
 pub const TELESCOPE_UPDATE_INTERVAL: Duration = Duration::from_secs(1);
 pub const FAKE_TELESCOPE_SLEWING_SPEED: f64 = PI / 10.0;
+pub const LOWEST_ALLOWED_ALTITUDE: f64 = 5.0 / 180. * PI;
 
 type FakeTelescopeControl = Arc<Mutex<FakeTelescope>>;
 
@@ -30,6 +32,7 @@ pub fn create_telescope() -> FakeTelescopeControl {
             longitude: astro::angle::deg_frm_dms(-11, 55, 4.0).to_radians(),
             latitude: astro::angle::deg_frm_dms(57, 23, 35.0).to_radians(),
         },
+        most_recent_error: None,
     }))
 }
 
@@ -79,18 +82,19 @@ impl TelescopeControl for FakeTelescopeControl {
         target: TelescopeTarget,
     ) -> Result<TelescopeTarget, TelescopeError> {
         let mut telescope = self.clone().lock_owned().await;
+
+        telescope.most_recent_error = None;
+
         let target_horizontal =
             calculate_target_horizontal(telescope.location, target, telescope.horizontal);
-        if target_horizontal.altitude < 5.0f64.to_radians() {
+        if target_horizontal.altitude < LOWEST_ALLOWED_ALTITUDE {
             log::info!(
                 "Refusing to set target for telescope {} to {:?}. Target is below horizon",
                 id,
                 &target
             );
             telescope.target = TelescopeTarget::Stopped;
-            Err(TelescopeError::TargetBelowHorizon {
-                telescope_id: id.to_string(),
-            })
+            Err(TelescopeError::TargetBelowHorizon)
         } else {
             log::info!("Setting target for telescope {} to {:?}", id, &target);
             telescope.target = target;
@@ -99,9 +103,14 @@ impl TelescopeControl for FakeTelescopeControl {
     }
 
     async fn get_info(&self, _id: &str) -> Result<TelescopeInfo, TelescopeError> {
-        let (location, target, current_horizontal) = {
+        let (location, target, current_horizontal, most_recent_error) = {
             let telescope = self.lock().await;
-            (telescope.location, telescope.target, telescope.horizontal)
+            (
+                telescope.location,
+                telescope.target,
+                telescope.horizontal,
+                telescope.most_recent_error.clone(),
+            )
         };
 
         let target_horizontal = calculate_target_horizontal(location, target, current_horizontal);
@@ -126,6 +135,7 @@ impl TelescopeControl for FakeTelescopeControl {
             current_horizontal,
             commanded_horizontal: target_horizontal,
             current_target: target,
+            most_recent_error,
         })
     }
 
@@ -134,11 +144,23 @@ impl TelescopeControl for FakeTelescopeControl {
         let current_horizontal = telescope.horizontal;
         let target_horizontal =
             calculate_target_horizontal(telescope.location, telescope.target, current_horizontal);
-        let max_delta_angle = FAKE_TELESCOPE_SLEWING_SPEED * delta_time.as_secs_f64();
-        telescope.horizontal.azimuth += (target_horizontal.azimuth - current_horizontal.azimuth)
-            .clamp(-max_delta_angle, max_delta_angle);
-        telescope.horizontal.altitude += (target_horizontal.altitude - current_horizontal.altitude)
-            .clamp(-max_delta_angle, max_delta_angle);
+
+        if target_horizontal.altitude < LOWEST_ALLOWED_ALTITUDE {
+            telescope.target = TelescopeTarget::Stopped;
+            log::info!(
+                "Stopping telescope since target {:?} set below horizon.",
+                &telescope.target
+            );
+            telescope.most_recent_error = Some(TelescopeError::TargetBelowHorizon);
+        } else {
+            let max_delta_angle = FAKE_TELESCOPE_SLEWING_SPEED * delta_time.as_secs_f64();
+            telescope.horizontal.azimuth += (target_horizontal.azimuth
+                - current_horizontal.azimuth)
+                .clamp(-max_delta_angle, max_delta_angle);
+            telescope.horizontal.altitude += (target_horizontal.altitude
+                - current_horizontal.altitude)
+                .clamp(-max_delta_angle, max_delta_angle);
+        }
 
         Ok(())
     }
