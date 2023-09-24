@@ -24,13 +24,14 @@ pub struct Salsa {}
 
 #[derive(Debug, Clone, Routable, PartialEq)]
 pub enum Route {
-    #[at("/")]
+    #[not_found]
+    #[at("/salsa/")]
     Home,
-    #[at("/weather")]
+    #[at("/salsa/weather")]
     Weather,
-    #[at("/observe")]
+    #[at("/salsa/observe")]
     Observe,
-    #[at("/telescope/:id")]
+    #[at("/salsa/telescope/:id")]
     Telescope { id: String },
 }
 
