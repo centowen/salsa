@@ -1,15 +1,14 @@
+use axum::{routing::get, Router};
+use axum_server::tls_rustls::RustlsConfig;
 use clap::Parser;
 use database::create_database_from_directory;
-use std::net::Ipv4Addr;
+use std::net::SocketAddr;
 use telescope::create_telescope_collection;
-use warp::http::header;
-use warp::http::Method;
-use warp::Filter;
+use tower_http::services::ServeDir;
 
 mod booking_routes;
 mod database;
 mod fake_telescope;
-mod frontend_routes;
 mod salsa_telescope;
 mod telescope;
 mod telescope_controller;
@@ -24,12 +23,12 @@ struct Args {
     #[arg(short, long)]
     frontend_path: Option<String>,
 
-    /// Ip to listen to
-    #[arg(short, long, default_value = "127.0.0.1")]
-    ip: String,
+    #[clap(short, long)]
+    key_file_path: Option<String>,
 
-    #[arg(short, long)]
-    telescope_address: Option<String>,
+    #[clap(short, long)]
+    cert_file_path: Option<String>,
+    s: Option<String>,
 }
 
 #[tokio::main]
@@ -46,40 +45,40 @@ async fn main() {
         .await
         .expect("failed to create telescopes");
 
-    let weather_routes = warp::path!("api" / "weather").map(weather::get_weather_info);
+    let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
 
-    let routes = frontend_routes::routes(args.frontend_path.clone())
-        .or(weather_routes)
-        .or(booking_routes::routes(database))
-        .or(telescope_routes::routes(telescopes.clone()))
-        .with(
-            warp::cors()
-                .allow_credentials(true)
-                .allow_methods(vec![Method::HEAD, Method::GET, Method::POST])
-                .allow_headers(vec![header::CONTENT_TYPE])
-                .expose_headers(vec![header::LINK])
-                .max_age(300)
-                // .allow_origin("http://localhost")
-                .allow_any_origin(),
-        );
+    let mut app = Router::new()
+        .route("/api/ping", get(ping))
+        .route("/api/weather", get(weather::get_weather_info))
+        .nest("/api/telescopes", telescope_routes::routes(telescopes))
+        .nest("/api/bookings", booking_routes::routes(database.clone()));
 
-    let ip = match args.ip.parse::<Ipv4Addr>() {
-        Ok(ip) => ip,
-        Err(error) => {
-            log::error!("Cannot parse ip \"{}\": {}", args.ip, error);
-            return;
-        }
-    };
-
-    warp::serve(routes).run((ip, 3000)).await;
-    {
-        let mut telescopes = telescopes.write().await;
-        for telescope in telescopes.values_mut() {
-            if let Some(service) = telescope.service.take() {
-                service
-                    .await
-                    .expect("Could not join telescope service at end of program");
-            }
-        }
+    if let Some(frontend_path) = args.frontend_path {
+        let frontend_service = ServeDir::new(frontend_path);
+        app = app.fallback_service(frontend_service)
     }
+    // .route("/api/token", post(token))
+    // .route("/api/info", get(info))
+
+    log::info!("listening on {}", addr);
+    if let Some(key_file_path) = args.key_file_path {
+        let cert_file_path = args.cert_file_path.unwrap();
+        let tls = RustlsConfig::from_pem_file(cert_file_path, key_file_path)
+            .await
+            .unwrap();
+        axum_server::bind_rustls(addr, tls)
+            .serve(app.into_make_service())
+            .await
+            .unwrap();
+    } else {
+        axum_server::bind(addr)
+            .serve(app.into_make_service())
+            .await
+            .unwrap();
+    }
+}
+
+async fn ping() -> &'static str {
+    log::info!("ping");
+    "pong"
 }

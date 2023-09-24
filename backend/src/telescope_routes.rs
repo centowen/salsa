@@ -1,188 +1,107 @@
-use crate::telescope::TelescopeCollection;
-use warp::Filter;
+use crate::telescope::{Telescope, TelescopeCollection};
+use axum::{
+    extract::{Json, Path, State},
+    http::StatusCode,
+    response::{IntoResponse, Response},
+    routing::{get, post},
+    Router,
+};
+use common::{Direction, TelescopeError, TelescopeInfo, TelescopeTarget};
+use common::{ReceiverConfiguration, ReceiverError};
 
-pub fn routes(
-    telescopes: TelescopeCollection,
-) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    filters::get_telescope_direction(telescopes.clone())
-        .or(filters::get_telescopes(telescopes.clone()))
-        .or(filters::get_telescope_target(telescopes.clone()))
-        .or(filters::set_telescope_target(telescopes.clone()))
-        .or(filters::get_telescope_info(telescopes.clone()))
-        .or(filters::restart_telescope(telescopes.clone()))
-        .or(filters::set_receiver_configuration(telescopes.clone()))
+pub fn routes(telescopes: TelescopeCollection) -> Router {
+    let telescope_routes = Router::new()
+        .route("/", get(get_telescope))
+        .route("/direction", get(get_direction))
+        .route("/target", get(get_target).post(set_target))
+        .route("/restart", post(restart))
+        .route("/receiver", post(set_receiver_configuration));
+    let router = Router::new()
+        .route("/", get(get_telescopes))
+        .nest("/:telescope_id", telescope_routes)
+        .with_state(telescopes);
+    router
 }
 
-mod filters {
-    use super::handlers;
-    use crate::telescope::TelescopeCollection;
-    use warp::{Filter, Rejection, Reply};
-
-    pub fn get_telescopes(
-        telescope_collection: TelescopeCollection,
-    ) -> impl Filter<Extract = (impl Reply,), Error = Rejection> + Clone {
-        warp::path!("api" / "telescopes")
-            .and(warp::get())
-            .and(with_telescopes(telescope_collection))
-            .and_then(handlers::get_telescopes)
-    }
-
-    pub fn get_telescope_direction(
-        telescope_collection: TelescopeCollection,
-    ) -> impl Filter<Extract = (impl Reply,), Error = Rejection> + Clone {
-        warp::path!("api" / "telescope" / String / "direction")
-            .and(warp::get())
-            .and(with_telescopes(telescope_collection))
-            .and_then(handlers::get_telescope_direction)
-    }
-
-    pub fn get_telescope_target(
-        telescopes: TelescopeCollection,
-    ) -> impl Filter<Extract = (impl Reply,), Error = Rejection> + Clone {
-        warp::path!("api" / "telescope" / String / "target")
-            .and(warp::get())
-            .and(with_telescopes(telescopes))
-            .and_then(handlers::get_telescope_target)
-    }
-
-    pub fn set_telescope_target(
-        telescopes: TelescopeCollection,
-    ) -> impl Filter<Extract = (impl Reply,), Error = Rejection> + Clone {
-        warp::path!("api" / "telescope" / String / "target")
-            .and(warp::post())
-            .and(warp::body::json())
-            .and(with_telescopes(telescopes))
-            .and_then(handlers::set_telescope_target)
-    }
-
-    pub fn set_receiver_configuration(
-        telescopes: TelescopeCollection,
-    ) -> impl Filter<Extract = (impl Reply,), Error = Rejection> + Clone {
-        warp::path!("api" / "telescope" / String / "receiver")
-            .and(warp::post())
-            .and(warp::body::json())
-            .and(with_telescopes(telescopes))
-            .and_then(handlers::set_receiver_configuration)
-    }
-
-    pub fn get_telescope_info(
-        telescopes: TelescopeCollection,
-    ) -> impl Filter<Extract = (impl Reply,), Error = Rejection> + Clone {
-        warp::path!("api" / "telescope" / String)
-            .and(warp::get())
-            .and(with_telescopes(telescopes))
-            .and_then(handlers::get_telescope_info)
-    }
-
-    pub fn restart_telescope(
-        telescopes: TelescopeCollection,
-    ) -> impl Filter<Extract = (impl Reply,), Error = Rejection> + Clone {
-        warp::path!("api" / "telescope" / String / "restart")
-            .and(warp::get())
-            .and(with_telescopes(telescopes))
-            .and_then(handlers::restart_telescope)
-    }
-
-    fn with_telescopes(
-        telescope_collection: TelescopeCollection,
-    ) -> impl Filter<Extract = (TelescopeCollection,), Error = std::convert::Infallible> + Clone
-    {
-        warp::any().map(move || telescope_collection.clone())
-    }
-}
-
-mod handlers {
-    use crate::telescope::{Telescope, TelescopeCollection};
-    use common::{ReceiverConfiguration, TelescopeInfo, TelescopeTarget};
-    use warp::{Rejection, Reply};
-
-    async fn get_telescope(
-        telescopes: TelescopeCollection,
-        id: &str,
-    ) -> Result<tokio::sync::OwnedMutexGuard<dyn Telescope>, Rejection> {
-        let telescope = {
-            let telescopes = telescopes.read().await;
-            telescopes.get(id).map(|t| t.telescope.clone())
-        };
-        if let Some(telescope) = telescope {
-            Ok(telescope.lock_owned().await)
+async fn get_telescopes(State(telescopes): State<TelescopeCollection>) -> Json<Vec<TelescopeInfo>> {
+    let mut telescope_infos = Vec::<TelescopeInfo>::new();
+    for (name, telescope) in telescopes.read().await.iter() {
+        log::trace!("Checking {}", name);
+        let telescope = telescope.telescope.lock().await;
+        if let Ok(info) = telescope.get_info().await {
+            log::trace!("Accepted {}", name);
+            telescope_infos.push(info);
         } else {
-            Err(warp::reject::not_found())
+            log::trace!("Rejected {}", name);
         }
     }
+    Json(telescope_infos)
+}
 
-    pub async fn get_telescopes(telescopes: TelescopeCollection) -> Result<impl Reply, Rejection> {
-        let mut telescope_infos = Vec::<TelescopeInfo>::new();
-        for (name, telescope) in telescopes.read().await.iter() {
-            log::trace!("Checking {}", name);
-            let telescope = telescope.telescope.lock().await;
-            if let Ok(info) = telescope.get_info().await {
-                log::trace!("Accepted {}", name);
-                telescope_infos.push(info);
-            } else {
-                log::trace!("Rejected {}", name);
-            }
-        }
-        Ok(warp::reply::json(&telescope_infos))
-    }
+#[derive(Debug)]
+struct TelescopeNotFound;
 
-    pub async fn get_telescope_direction(
-        id: String,
-        telescopes: TelescopeCollection,
-    ) -> Result<impl Reply, Rejection> {
-        let telescope = get_telescope(telescopes, &id).await?;
-        let direction = telescope.get_direction().await;
-        Ok(warp::reply::json(&direction))
+impl IntoResponse for TelescopeNotFound {
+    fn into_response(self) -> Response {
+        (StatusCode::NOT_FOUND, "Telescope not found".to_string()).into_response()
     }
+}
 
-    pub async fn get_telescope_target(
-        id: String,
-        telescopes: TelescopeCollection,
-    ) -> Result<impl Reply, Rejection> {
-        let telescope = get_telescope(telescopes, &id).await?;
-        let target = telescope.get_target().await;
-        Ok(warp::reply::json(&target))
-    }
+async fn extract_telescope(
+    telescopes: TelescopeCollection,
+    id: String,
+) -> Result<tokio::sync::OwnedMutexGuard<dyn Telescope>, TelescopeNotFound> {
+    let telescpes = telescopes.read().await;
+    let telescope = telescpes.get(&id).ok_or(TelescopeNotFound)?;
+    Ok(telescope.telescope.clone().lock_owned().await)
+}
 
-    pub async fn set_telescope_target(
-        id: String,
-        target: TelescopeTarget,
-        telescopes: TelescopeCollection,
-    ) -> Result<impl Reply, Rejection> {
-        let mut telescope = get_telescope(telescopes, &id).await?;
-        let result = telescope.set_target(target).await;
-        Ok(warp::reply::json(&result))
-    }
+async fn get_telescope(
+    State(telescopes): State<TelescopeCollection>,
+    Path(telescope_id): Path<String>,
+) -> Result<Json<Result<TelescopeInfo, TelescopeError>>, TelescopeNotFound> {
+    let telescope = extract_telescope(telescopes, telescope_id).await?;
+    Ok(Json(telescope.get_info().await))
+}
 
-    pub async fn set_receiver_configuration(
-        id: String,
-        receiver_configuration: ReceiverConfiguration,
-        telescopes: TelescopeCollection,
-    ) -> Result<impl Reply, Rejection> {
-        let mut telescope = get_telescope(telescopes, &id).await?;
-        let result = telescope
-            .set_receiver_configuration(receiver_configuration)
-            .await;
-        Ok(warp::reply::json(&result))
-    }
+async fn get_direction(
+    State(telescopes): State<TelescopeCollection>,
+    Path(telescope_id): Path<String>,
+) -> Result<Json<Result<Direction, TelescopeError>>, TelescopeNotFound> {
+    let telescope = extract_telescope(telescopes, telescope_id).await?;
+    Ok(Json(telescope.get_direction().await))
+}
 
-    pub async fn get_telescope_info(
-        id: String,
-        telescopes: TelescopeCollection,
-    ) -> Result<impl Reply, Rejection> {
-        let info = {
-            let telescope = get_telescope(telescopes, &id).await?;
-            telescope.get_info().await
-        };
-        Ok(warp::reply::json(&info))
-    }
+async fn get_target(
+    State(telescopes): State<TelescopeCollection>,
+    Path(telescope_id): Path<String>,
+) -> Result<Json<Result<TelescopeTarget, TelescopeError>>, TelescopeNotFound> {
+    let telescope = extract_telescope(telescopes, telescope_id).await?;
+    Ok(Json(telescope.get_target().await))
+}
 
-    pub async fn restart_telescope(
-        id: String,
-        telescopes: TelescopeCollection,
-    ) -> Result<impl Reply, Rejection> {
-        let mut telescope = get_telescope(telescopes, &id).await?;
-        let info = telescope.restart().await;
-        Ok(warp::reply::json(&info))
-    }
+async fn set_target(
+    State(telescopes): State<TelescopeCollection>,
+    Path(telescope_id): Path<String>,
+    Json(target): Json<TelescopeTarget>,
+) -> Result<Json<Result<TelescopeTarget, TelescopeError>>, TelescopeNotFound> {
+    let mut telescope = extract_telescope(telescopes, telescope_id).await?;
+    Ok(Json(telescope.set_target(target).await))
+}
+
+async fn restart(
+    State(telescopes): State<TelescopeCollection>,
+    Path(telescope_id): Path<String>,
+) -> Result<Json<Result<(), TelescopeError>>, TelescopeNotFound> {
+    let mut telescope = extract_telescope(telescopes, telescope_id).await?;
+    Ok(Json(telescope.restart().await))
+}
+
+async fn set_receiver_configuration(
+    State(telescopes): State<TelescopeCollection>,
+    Path(telescope_id): Path<String>,
+    Json(target): Json<ReceiverConfiguration>,
+) -> Result<Json<Result<ReceiverConfiguration, ReceiverError>>, TelescopeNotFound> {
+    let mut telescope = extract_telescope(telescopes, telescope_id).await?;
+    Ok(Json(telescope.set_receiver_configuration(target).await))
 }
