@@ -47,16 +47,20 @@ The guide below is based on https://www.splitbrain.org/blog/2017-08/10-homeassis
 
 3. Configure dehydrated
 
-    1. Set domain to the one created above. 
-    ```shell
-    echo "salsa.duckdns.org" >> domains.txt
-    ```
-    2. Create a config with
-    ```
-    CHALLENGETYPE="dns-01"
-    HOOK="${BASEDIR}/hook.sh"
-    ```
-    3. Create the `hook.sh` refenced above. This will tell dehydrated how to access your duckdns domain
+    1. Enter the dehydrated directory
+        ```shell
+        cd dehydrated
+        ```
+    2. Set domain to the one created above.
+        ```shell
+        echo "salsa.duckdns.org" >> domains.txt
+        ```
+    3. Create a file called `config` with
+        ```
+        CHALLENGETYPE="dns-01"
+        HOOK="${BASEDIR}/hook.sh"
+        ```
+    4. Create the `hook.sh` refenced above. This will tell dehydrated how to access your duckdns domain
 
         ```
         #!/usr/bin/env bash
@@ -92,8 +96,8 @@ The guide below is based on https://www.splitbrain.org/blog/2017-08/10-homeassis
         esac
         ```
 
-    4. Enter token and domain in the file. Token can be copied from duckdns.org page.
-    5. Register for certificate 
+    5. Enter token and domain in the file. Token can be copied from duckdns.org page.
+    6. Register for certificate
 
         ```shell
         ./dehydrated --register  --accept-terms
