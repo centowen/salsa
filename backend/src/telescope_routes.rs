@@ -5,6 +5,7 @@ pub fn routes(
     telescopes: TelescopeCollection,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     filters::get_telescope_direction(telescopes.clone())
+        .or(filters::get_telescopes(telescopes.clone()))
         .or(filters::get_telescope_target(telescopes.clone()))
         .or(filters::set_telescope_target(telescopes.clone()))
         .or(filters::get_telescope_info(telescopes.clone()))
@@ -16,6 +17,15 @@ mod filters {
     use super::handlers;
     use crate::telescope::TelescopeCollection;
     use warp::{Filter, Rejection, Reply};
+
+    pub fn get_telescopes(
+        telescope_collection: TelescopeCollection,
+    ) -> impl Filter<Extract = (impl Reply,), Error = Rejection> + Clone {
+        warp::path!("api" / "telescopes")
+            .and(warp::get())
+            .and(with_telescopes(telescope_collection))
+            .and_then(handlers::get_telescopes)
+    }
 
     pub fn get_telescope_direction(
         telescope_collection: TelescopeCollection,
@@ -83,7 +93,7 @@ mod filters {
 
 mod handlers {
     use crate::telescope::{Telescope, TelescopeCollection};
-    use common::{ReceiverConfiguration, TelescopeTarget};
+    use common::{ReceiverConfiguration, TelescopeInfo, TelescopeTarget};
     use warp::{Rejection, Reply};
 
     async fn get_telescope(
@@ -92,13 +102,27 @@ mod handlers {
     ) -> Result<tokio::sync::OwnedMutexGuard<dyn Telescope>, Rejection> {
         let telescope = {
             let telescopes = telescopes.read().await;
-            telescopes.get(id).cloned()
+            telescopes.get(id).map(|t| t.telescope.clone())
         };
         if let Some(telescope) = telescope {
             Ok(telescope.lock_owned().await)
         } else {
             Err(warp::reject::not_found())
         }
+    }
+
+    pub async fn get_telescopes(telescopes: TelescopeCollection) -> Result<impl Reply, Rejection> {
+        let mut telescope_infos = Vec::<TelescopeInfo>::new();
+        {
+            let telescopes = telescopes.read().await;
+            for telescope in telescopes.values() {
+                let telescope = telescope.telescope.lock().await;
+                if let Ok(info) = telescope.get_info().await {
+                    telescope_infos.push(info);
+                }
+            }
+        };
+        Ok(warp::reply::json(&telescope_infos))
     }
 
     pub async fn get_telescope_direction(

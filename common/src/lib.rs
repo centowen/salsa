@@ -46,6 +46,7 @@ pub struct ObservedSpectra {
 
 #[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
 pub struct TelescopeInfo {
+    pub id: String,
     pub status: TelescopeStatus,
     pub commanded_horizontal: Option<Direction>,
     pub current_horizontal: Direction,
@@ -53,6 +54,36 @@ pub struct TelescopeInfo {
     pub most_recent_error: Option<TelescopeError>,
     pub measurement_in_progress: bool,
     pub latest_observation: Option<ObservedSpectra>,
+}
+
+#[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
+pub struct SalsaTelescopeDefinition {
+    pub controller_address: String,
+    pub receiver_address: String,
+}
+
+#[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
+pub struct FakeTelescopeDefinition {
+    pub slewing_speed: f64,
+}
+
+#[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
+pub enum TelescopeType {
+    Salsa {
+        definition: SalsaTelescopeDefinition,
+    },
+    Fake {
+        definition: FakeTelescopeDefinition,
+    },
+}
+
+#[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
+pub struct TelescopeDefinition {
+    pub name: String,
+    pub enabled: bool,
+    pub location: Location,
+    pub min_altitude: f64,
+    pub telescope_type: TelescopeType,
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
