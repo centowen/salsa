@@ -5,11 +5,10 @@ pub struct WeatherInfo {
     pub temperature: f64,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-pub enum TelescopeTarget
-{
+#[derive(Serialize, Deserialize, PartialEq, Debug, Copy, Clone)]
+pub enum TelescopeTarget {
     Equatorial {
-        ra: f32, // in radians
+        ra: f32,  // in radians
         dec: f32, // in radians
     },
     Galactic {
