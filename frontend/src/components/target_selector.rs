@@ -35,10 +35,73 @@ pub fn format_latitude(l: f32) -> AttrValue {
     AttrValue::from((l * 180.0 / PI).to_string())
 }
 
+pub fn parse_right_ascension(ra: &str) -> Option<f32> {
+    let e = regex::Regex::new(r"(\d{1,2})[h ]+(\d{2})[m'′ ]+(\d{2}\.?\d{0,6})[″s]?").unwrap();
+    if let Some(captures) = e.captures(ra) {
+        if let (Ok(deg), Ok(min), Ok(sec)) = (
+            captures[1].parse::<f32>(),
+            captures[2].parse::<f32>(),
+            captures[3].parse::<f32>(),
+        ) {
+            let sign = deg.signum();
+            let deg = sign * deg;
+            return Some(sign * (deg + min / 60. + sec / 3600.) / 12.0 * PI);
+        }
+        Some(0.0)
+    } else {
+        None
+    }
+}
+
+pub fn format_right_ascension(ra: f32) -> AttrValue {
+    let hours = ra * 12.0 / PI;
+    let minutes = (hours - hours.floor()) * 60.0;
+    let seconds = (minutes - minutes.floor()) * 60.0;
+    AttrValue::from(format!(
+        "{:.0}h{:.0}m{:.0}",
+        hours.floor(),
+        minutes.floor(),
+        seconds.floor()
+    ))
+}
+
+pub fn parse_declination(dec: &str) -> Option<f32> {
+    let e = regex::Regex::new(r"([\+-]?\d{1,4})[d° ]+(\d{2})[m'′ ]+(\d{2}″?\.?\d{0,5})″?").unwrap();
+    if let Some(captures) = e.captures(dec) {
+        if let (Ok(deg), Ok(min), Ok(sec)) = (
+            captures[1].parse::<f32>(),
+            captures[2].parse::<f32>(),
+            captures[3].replace("″", "").parse::<f32>(),
+        ) {
+            let sign = deg.signum();
+            let deg = sign * deg;
+            return Some(sign * (deg + min / 60. + sec / 3600.) / 180.0 * PI);
+        }
+    }
+
+    None
+}
+
+pub fn format_declination(dec: f32) -> AttrValue {
+    let degrees = dec * 180.0 / PI;
+    let minutes = (degrees - degrees.floor()) * 60.0;
+    let seconds = (minutes - minutes.floor()) * 60.0;
+    AttrValue::from(format!(
+        "{}{:.0}d{:.0}m{:.0}",
+        if degrees.is_sign_positive() { "+" } else { "" },
+        degrees.floor(),
+        minutes.floor(),
+        seconds.floor()
+    ))
+}
+
 fn format_target(target: TelescopeTarget) -> (Option<AttrValue>, Option<AttrValue>) {
     match target {
         TelescopeTarget::Galactic { l, b } => (Some(format_latitude(l)), Some(format_longitude(b))),
-        TelescopeTarget::Equatorial { ra: _, dec: _ } => (None, None),
+        TelescopeTarget::Equatorial { ra, dec } => (
+            Some(format_right_ascension(ra)),
+            Some(format_declination(dec)),
+        ),
         TelescopeTarget::Parked => (None, None),
         TelescopeTarget::Stopped => (None, None),
     }
@@ -223,7 +286,13 @@ fn get_configured_target(selector: &TargetSelector) -> Option<TelescopeTarget> {
                     None
                 }
             }
-            _ => None,
+            CoordinateSystem::Equatorial => {
+                if let (Some(ra), Some(dec)) = (parse_right_ascension(x), parse_declination(y)) {
+                    Some(TelescopeTarget::Equatorial { ra, dec })
+                } else {
+                    None
+                }
+            }
         }
     } else {
         None
@@ -369,5 +438,87 @@ impl Component for TargetSelector {
                 <button onclick={park_telescope}>{"Park"}</button>
             </>
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use approx::assert_relative_eq;
+
+    const DEG: f32 = PI / 180.0f32;
+    const ARCMINUTE: f32 = DEG / 60.0;
+    const ARCSECOND: f32 = ARCMINUTE / 60.0;
+    const HOUR: f32 = PI / 12f32;
+    const MINUTE: f32 = HOUR / 60.0;
+    const SECOND: f32 = MINUTE / 60.0;
+
+    #[test]
+    fn test_parse_declination() {
+        assert_eq!(None, parse_declination("Not a coordinate"));
+        assert_eq!(Some(0.0), parse_declination("+0d00m00.000"));
+        assert_eq!(Some(0.0), parse_declination("-0d00m00.000"));
+
+        assert_relative_eq!(-DEG, parse_declination("-1d00m00.000").unwrap());
+        assert_relative_eq!(-63.0 * DEG, parse_declination("-63d00m00.000").unwrap());
+        assert_relative_eq!(
+            -(63.0 * DEG + 30.0 * ARCMINUTE),
+            parse_declination("-63d30m00.000").unwrap()
+        );
+        assert_relative_eq!(
+            -(64.0 * DEG + 30.0 * ARCMINUTE + 23.0 * ARCSECOND),
+            parse_declination("-64d30m23.000").unwrap()
+        );
+        assert_relative_eq!(
+            64.0 * DEG + 30.0 * ARCMINUTE + 23.0 * ARCSECOND,
+            parse_declination("64d30m23.000").unwrap()
+        );
+        assert_relative_eq!(
+            64.0 * DEG + 30.0 * ARCMINUTE + 23.0 * ARCSECOND,
+            parse_declination("+64d30m23.000").unwrap()
+        );
+        assert_relative_eq!(
+            23.0 * DEG + 30.0 * ARCMINUTE + 11.0 * ARCSECOND,
+            parse_declination("+23° 30′ 11″").unwrap()
+        );
+
+        assert_relative_eq!(
+            -(23.0 * DEG + 30.0 * ARCMINUTE + 11.2 * ARCSECOND),
+            parse_declination("-23 30 11.2").unwrap()
+        );
+    }
+
+    #[test]
+    fn test_parse_right_ascension() {
+        assert_eq!(None, parse_right_ascension("Not a coordinate"));
+        assert_eq!(Some(0.0), parse_right_ascension("0h00m00.000"));
+
+        assert_relative_eq!(HOUR, parse_right_ascension("1h00m00.000").unwrap());
+        assert_relative_eq!(15.0 * HOUR, parse_right_ascension("15 00 00.000").unwrap());
+        assert_relative_eq!(15.5 * HOUR, parse_right_ascension("15h30m00.000s").unwrap());
+        assert_relative_eq!(
+            15.0 * HOUR + 30.0 * MINUTE + 23.0 * SECOND,
+            parse_right_ascension("15h30m23.000s").unwrap()
+        );
+        assert_relative_eq!(
+            15.0 * HOUR + 34.0 * MINUTE + 57.1 * SECOND,
+            parse_right_ascension("15h 34m 57.1s").unwrap()
+        );
+    }
+
+    #[test]
+    fn test_format_right_ascension() {
+        assert_eq!(
+            "15h30m23",
+            format_right_ascension(15.0 * HOUR + 30.0 * MINUTE + 23.0 * SECOND).as_str()
+        );
+    }
+
+    #[test]
+    fn test_format_declination() {
+        assert_eq!(
+            "+15d30m23",
+            format_declination(15.0 * DEG + 30.0 * ARCMINUTE + 23.0 * ARCSECOND).as_str()
+        );
     }
 }
