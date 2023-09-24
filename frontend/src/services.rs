@@ -2,8 +2,6 @@ use std::time::Duration;
 
 use common::{TelescopeInfo, WeatherInfo};
 use gloo_net::http::Request;
-use serde::de::DeserializeOwned;
-use serde::Deserialize;
 use yew::platform::spawn_local;
 use yew::platform::time::sleep;
 use yew::virtual_dom::AttrValue;
