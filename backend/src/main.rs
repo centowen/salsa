@@ -64,7 +64,11 @@ async fn main() {
     log::info!("listening on {}", addr);
     if let Some(key_file_path) = args.key_file_path {
         let cert_file_path = args.cert_file_path.unwrap();
-        log::info!("using tls with key file {} and cert file {}", key_file_path, cert_file_path);
+        log::info!(
+            "using tls with key file {} and cert file {}",
+            key_file_path,
+            cert_file_path
+        );
         let tls = RustlsConfig::from_pem_file(cert_file_path, key_file_path)
             .await
             .unwrap();
