@@ -35,21 +35,15 @@ pub fn format_latitude(l: f32) -> AttrValue {
     AttrValue::from((l * 180.0 / PI).to_string())
 }
 
-fn format_target(
-    target: Option<TelescopeTarget>,
-) -> (CoordinateSystem, Option<AttrValue>, Option<AttrValue>) {
+fn format_target(target: Option<TelescopeTarget>) -> (Option<AttrValue>, Option<AttrValue>) {
     match target {
         Some(target) => match target {
-            TelescopeTarget::Galactic { l, b } => (
-                CoordinateSystem::Galactic,
-                Some(format_latitude(l)),
-                Some(format_longitude(b)),
-            ),
-            TelescopeTarget::Equatorial { ra: _, dec: _ } => {
-                (CoordinateSystem::Equatorial, None, None)
+            TelescopeTarget::Galactic { l, b } => {
+                (Some(format_latitude(l)), Some(format_longitude(b)))
             }
+            TelescopeTarget::Equatorial { ra: _, dec: _ } => (None, None),
         },
-        _ => (CoordinateSystem::Galactic, None, None),
+        _ => (None, None),
     }
 }
 
@@ -140,7 +134,7 @@ fn CoordinateSystemSelector(props: &CoordinateSystemSelectorProps) -> Html {
                 .cast::<HtmlSelectElement>()
                 .expect("Reference for coordinate system not attached to select node");
 
-            let new_coorindate_system = match coordinate_system_select.selected_index() {
+            match coordinate_system_select.selected_index() {
                 0 => on_change_coordinate_system.emit(CoordinateSystem::Galactic),
                 1 => on_change_coordinate_system.emit(CoordinateSystem::Equatorial),
                 _ => {}
@@ -316,8 +310,8 @@ impl Component for TargetSelector {
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
-        let (coordinate_system, x, y) = if self.target == ctx.props().target {
-            (self.coordinate_system, self.x.clone(), self.y.clone())
+        let (x, y) = if self.target == ctx.props().target {
+            (self.x.clone(), self.y.clone())
         } else {
             format_target(ctx.props().target)
         };
