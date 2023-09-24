@@ -81,7 +81,8 @@ The guide below is based on https://www.splitbrain.org/blog/2017-08/10-homeassis
                 echo
                 ;;
             "deploy_cert")
-                sudo systemctl restart home-assistant@homeassistant.service
+                echo "Update certificate"
+                echo
                 ;;
             "unchanged_cert")
                 ;;
