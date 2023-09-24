@@ -12,8 +12,11 @@ use pages::observe::ObservePage;
 use yew::prelude::*;
 use yew::{html, Context};
 use yew_router::prelude::*;
+use common::TelescopeTarget;
 
-pub enum Msg {}
+pub enum Msg {
+    MoveTelescope(TelescopeTarget)
+}
 
 pub struct Salsa {}
 
