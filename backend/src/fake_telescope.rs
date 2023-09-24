@@ -1,5 +1,6 @@
 use crate::telescope::Telescope;
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use common::{
     Direction, Location, ObservedSpectra, ReceiverConfiguration, ReceiverError, TelescopeError,
     TelescopeInfo, TelescopeStatus, TelescopeTarget,
@@ -37,7 +38,7 @@ pub fn create(name: String) -> FakeTelescope {
         horizontal: FAKE_TELESCOPE_PARKING_HORIZONTAL,
         location: Location {
             longitude: 0.20802143022, //(11.0+55.0/60.0+7.5/3600.0) * PI / 180.0. Sign positive, handled in gmst calc
-            latitude: 1.00170457462, //(57.0+23.0/60.0+36.4/3600.0) * PI / 180.0
+            latitude: 1.00170457462,  //(57.0+23.0/60.0+36.4/3600.0) * PI / 180.0
         },
         most_recent_error: None,
         receiver_configuration: ReceiverConfiguration { integrate: false },
@@ -64,7 +65,8 @@ impl Telescope for FakeTelescope {
         self.receiver_configuration.integrate = false;
         self.current_spectra.clear();
 
-        let target_horizontal = calculate_target_horizontal(self.location, target, self.horizontal);
+        let target_horizontal =
+            calculate_target_horizontal(self.location, Utc::now(), target, self.horizontal);
         if target_horizontal.altitude < LOWEST_ALLOWED_ALTITUDE {
             log::info!(
                 "Refusing to set target for telescope {} to {:?}. Target is below horizon",
@@ -100,7 +102,7 @@ impl Telescope for FakeTelescope {
 
     async fn get_info(&self) -> Result<TelescopeInfo, TelescopeError> {
         let target_horizontal =
-            calculate_target_horizontal(self.location, self.target, self.horizontal);
+            calculate_target_horizontal(self.location, Utc::now(), self.target, self.horizontal);
 
         let horizontal_offset_squared = (target_horizontal.azimuth - self.horizontal.azimuth)
             .powi(2)
@@ -155,9 +157,10 @@ impl Telescope for FakeTelescope {
     }
 
     async fn update(&mut self, delta_time: Duration) -> Result<(), TelescopeError> {
+        let now = Utc::now();
         let current_horizontal = self.horizontal;
         let target_horizontal =
-            calculate_target_horizontal(self.location, self.target, current_horizontal);
+            calculate_target_horizontal(self.location, now, self.target, current_horizontal);
 
         if target_horizontal.altitude < LOWEST_ALLOWED_ALTITUDE {
             self.target = TelescopeTarget::Stopped;
@@ -211,14 +214,17 @@ fn create_fake_spectra(integration_time: Duration) -> ObservedSpectra {
 
 fn calculate_target_horizontal(
     location: Location,
+    when: DateTime<Utc>,
     target: TelescopeTarget,
     current_horizontal: Direction,
 ) -> Direction {
     match target {
         TelescopeTarget::Equatorial { ra, dec } => {
-            common::coords::horizontal_from_equatorial(location, ra, dec)
+            common::coords::horizontal_from_equatorial(location, when, ra, dec)
         }
-        TelescopeTarget::Galactic { l, b } => common::coords::horizontal_from_galactic(location, l, b),
+        TelescopeTarget::Galactic { l, b } => {
+            common::coords::horizontal_from_galactic(location, when, l, b)
+        }
         TelescopeTarget::Stopped => current_horizontal,
         TelescopeTarget::Parked => FAKE_TELESCOPE_PARKING_HORIZONTAL,
     }
