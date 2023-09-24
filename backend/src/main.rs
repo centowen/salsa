@@ -20,13 +20,13 @@ mod weather;
 #[command(author, version, about, long_about = None)]
 struct Args {
     /// Path to packaged wasm app
-    #[arg(short, long)]
+    #[arg(short, long, env = "FRONTEND_PATH")]
     frontend_path: Option<String>,
 
-    #[clap(short, long)]
+    #[arg(short, long, env = "KEY_FILE_PATH")]
     key_file_path: Option<String>,
 
-    #[clap(short, long)]
+    #[arg(short, long, env = "CERT_FILE_PATH")]
     cert_file_path: Option<String>,
     s: Option<String>,
 }
@@ -54,6 +54,7 @@ async fn main() {
         .nest("/api/bookings", booking_routes::routes(database.clone()));
 
     if let Some(frontend_path) = args.frontend_path {
+        log::info!("serving frontend from {}", frontend_path);
         let frontend_service = ServeDir::new(frontend_path);
         app = app.fallback_service(frontend_service)
     }
@@ -63,6 +64,7 @@ async fn main() {
     log::info!("listening on {}", addr);
     if let Some(key_file_path) = args.key_file_path {
         let cert_file_path = args.cert_file_path.unwrap();
+        log::info!("using tls with key file {} and cert file {}", key_file_path, cert_file_path);
         let tls = RustlsConfig::from_pem_file(cert_file_path, key_file_path)
             .await
             .unwrap();
