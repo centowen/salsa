@@ -15,17 +15,22 @@ pub struct Props {
     pub id: String,
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub enum TelescopePageError {
     RequestError,
     TargetBelowHorizon,
+    TelescopeIOError(String),
+    TelescopeNotConnected,
 }
 
 impl From<TelescopeError> for TelescopePageError {
     fn from(value: TelescopeError) -> Self {
         match value {
-            TelescopeError::TargetBelowHorizon { .. } => TelescopePageError::TargetBelowHorizon,
-            TelescopeError::TelescopeIOError(_) => todo!(),
+            TelescopeError::TargetBelowHorizon => TelescopePageError::TargetBelowHorizon,
+            TelescopeError::TelescopeIOError(error_message) => {
+                TelescopePageError::TelescopeIOError(error_message)
+            }
+            TelescopeError::TelescopeNotConnected => TelescopePageError::TelescopeNotConnected,
         }
     }
 }
@@ -222,17 +227,20 @@ impl Component for TelescopePage {
         };
 
         let commanded_horizontal = self.info.as_ref().map_or("Loading".to_string(), |info| {
-            format!(
-                "{:.1}°, {:.1}°",
-                info.commanded_horizontal.azimuth.to_degrees(),
-                info.commanded_horizontal.altitude.to_degrees()
-            )
+            if let Some(commanded_horizontal) = info.commanded_horizontal {
+                format!(
+                    "{:.1}°, {:.1}°",
+                    commanded_horizontal.azimuth, commanded_horizontal.altitude
+                )
+            } else {
+                "".to_string()
+            }
         });
+
         let current_horizontal = self.info.as_ref().map_or("Loading".to_string(), |info| {
             format!(
                 "{:.1}°, {:.1}°",
-                info.current_horizontal.azimuth.to_degrees(),
-                info.current_horizontal.altitude.to_degrees()
+                info.current_horizontal.azimuth, info.current_horizontal.altitude
             )
         });
 
@@ -247,17 +255,25 @@ impl Component for TelescopePage {
                 " ({})",
                 match error {
                     TelescopeError::TargetBelowHorizon =>
-                        "Stopped tracking selected target, it set below the horizon.",
-                    TelescopeError::TelescopeIOError(_) => todo!(),
+                        "Stopped tracking selected target, it set below the horizon.".to_string(),
+                    TelescopeError::TelescopeIOError(error_message) =>
+                        format!("Communication with telescope failed: {}", error_message),
+                    TelescopeError::TelescopeNotConnected =>
+                        "No telescope connected, no observations will be possible".to_string(),
                 }
             )
-        } else if let Some(error) = self.most_recent_error {
+        } else if let Some(error) = &self.most_recent_error {
             format!(
                 " ({})",
                 match error {
-                    TelescopePageError::RequestError => "Failed to send request",
+                    TelescopePageError::RequestError => "Failed to send request".to_string(),
                     TelescopePageError::TargetBelowHorizon =>
-                        "Could not track selected target, it is currently below the horizon.",
+                        "Could not track selected target, it is currently below the horizon."
+                            .to_string(),
+                    TelescopePageError::TelescopeIOError(error_message) =>
+                        format!("Communication with telescope failed: {}", error_message),
+                    TelescopePageError::TelescopeNotConnected =>
+                        "No telescope connected, no observations will be possible".to_string(),
                 }
             )
         } else {
