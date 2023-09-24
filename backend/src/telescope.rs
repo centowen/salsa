@@ -1,7 +1,10 @@
 use async_trait::async_trait;
 use common::{
-    Direction, Location, TelescopeError, TelescopeInfo, TelescopeStatus, TelescopeTarget,
+    Direction, Location, ObservedSpectra, ReceiverConfiguration, ReceiverError, TelescopeError,
+    TelescopeInfo, TelescopeStatus, TelescopeTarget,
 };
+use rand::Rng;
+use rand_distr::StandardNormal;
 use std::f64::consts::PI;
 use std::sync::Arc;
 use std::time::Duration;
@@ -12,6 +15,8 @@ pub struct FakeTelescope {
     pub horizontal: Direction,
     pub location: Location,
     pub most_recent_error: Option<TelescopeError>,
+    pub receiver_configuration: ReceiverConfiguration,
+    pub current_spectra: Vec<ObservedSpectra>,
 }
 
 const PARKING_HORIZONTAL: Direction = Direction {
@@ -21,6 +26,11 @@ const PARKING_HORIZONTAL: Direction = Direction {
 pub const TELESCOPE_UPDATE_INTERVAL: Duration = Duration::from_secs(1);
 pub const FAKE_TELESCOPE_SLEWING_SPEED: f64 = PI / 10.0;
 pub const LOWEST_ALLOWED_ALTITUDE: f64 = 5.0 / 180. * PI;
+pub const FAKE_TELESCOPE_CHANNELS: usize = 400;
+pub const FAKE_TELESCOPE_CHANNEL_WIDTH: f32 = 2e6f32 / FAKE_TELESCOPE_CHANNELS as f32;
+pub const FAKE_TELESCOPE_FIRST_CHANNEL: f32 =
+    1.420e9f32 - FAKE_TELESCOPE_CHANNEL_WIDTH * FAKE_TELESCOPE_CHANNELS as f32 / 2f32;
+pub const FAKE_TELESCOPE_NOISE: f32 = 2f32;
 
 type FakeTelescopeControl = Arc<Mutex<FakeTelescope>>;
 
@@ -33,6 +43,8 @@ pub fn create_telescope() -> FakeTelescopeControl {
             latitude: astro::angle::deg_frm_dms(57, 23, 35.0).to_radians(),
         },
         most_recent_error: None,
+        receiver_configuration: ReceiverConfiguration { integrate: false },
+        current_spectra: vec![],
     }))
 }
 
@@ -51,6 +63,26 @@ pub fn calculate_target_horizontal(
     }
 }
 
+pub fn create_fake_spectra(integration_time: Duration) -> ObservedSpectra {
+    let mut rng = rand::thread_rng();
+
+    let frequencies: Vec<f32> = (0..FAKE_TELESCOPE_CHANNELS)
+        .map(|channel| channel as f32 * FAKE_TELESCOPE_CHANNEL_WIDTH + FAKE_TELESCOPE_FIRST_CHANNEL)
+        .collect();
+    let spectra: Vec<f32> = vec![5f32; FAKE_TELESCOPE_CHANNELS]
+        .into_iter()
+        .map(|value| {
+            value + FAKE_TELESCOPE_NOISE * rng.sample::<f32, StandardNormal>(StandardNormal)
+        })
+        .collect();
+
+    ObservedSpectra {
+        frequencies,
+        spectra,
+        observation_time: integration_time,
+    }
+}
+
 #[async_trait]
 pub trait TelescopeControl: Send + Sync {
     async fn get_direction(&self, id: &str) -> Result<Direction, TelescopeError>;
@@ -60,6 +92,11 @@ pub trait TelescopeControl: Send + Sync {
         id: &str,
         target: TelescopeTarget,
     ) -> Result<TelescopeTarget, TelescopeError>;
+    async fn set_receiver_configuration(
+        &self,
+        id: &str,
+        receiver_configuration: ReceiverConfiguration,
+    ) -> Result<ReceiverConfiguration, ReceiverError>;
     async fn get_info(&self, _id: &str) -> Result<TelescopeInfo, TelescopeError>;
     async fn update(&self, delta_time: Duration) -> Result<(), TelescopeError>;
 }
@@ -84,6 +121,8 @@ impl TelescopeControl for FakeTelescopeControl {
         let mut telescope = self.clone().lock_owned().await;
 
         telescope.most_recent_error = None;
+        telescope.receiver_configuration.integrate = false;
+        telescope.current_spectra.clear();
 
         let target_horizontal =
             calculate_target_horizontal(telescope.location, target, telescope.horizontal);
@@ -102,14 +141,39 @@ impl TelescopeControl for FakeTelescopeControl {
         }
     }
 
+    async fn set_receiver_configuration(
+        &self,
+        _id: &str,
+        receiver_configuration: ReceiverConfiguration,
+    ) -> Result<ReceiverConfiguration, ReceiverError> {
+        let mut telescope = self.clone().lock_owned().await;
+        if receiver_configuration.integrate && !telescope.receiver_configuration.integrate {
+            log::info!("Starting integration");
+            telescope.receiver_configuration.integrate = true;
+        } else if !receiver_configuration.integrate && telescope.receiver_configuration.integrate {
+            log::info!("Stopping integration");
+            telescope.receiver_configuration.integrate = false;
+        }
+        Ok(telescope.receiver_configuration)
+    }
+
     async fn get_info(&self, _id: &str) -> Result<TelescopeInfo, TelescopeError> {
-        let (location, target, current_horizontal, most_recent_error) = {
+        let (
+            location,
+            target,
+            current_horizontal,
+            most_recent_error,
+            receiver_configuration,
+            current_spectra,
+        ) = {
             let telescope = self.lock().await;
             (
                 telescope.location,
                 telescope.target,
                 telescope.horizontal,
                 telescope.most_recent_error.clone(),
+                telescope.receiver_configuration,
+                telescope.current_spectra.clone(),
             )
         };
 
@@ -130,12 +194,40 @@ impl TelescopeControl for FakeTelescopeControl {
             }
         };
 
+        let latest_observation = if current_spectra.is_empty() {
+            None
+        } else {
+            let mut latest_observation = ObservedSpectra {
+                frequencies: vec![0f32; FAKE_TELESCOPE_CHANNELS],
+                spectra: vec![0f32; FAKE_TELESCOPE_CHANNELS],
+                observation_time: Duration::from_secs(0),
+            };
+            for integration in &current_spectra {
+                latest_observation.spectra = latest_observation
+                    .spectra
+                    .into_iter()
+                    .zip(integration.spectra.iter())
+                    .map(|(a, b)| a + b)
+                    .collect();
+                latest_observation.observation_time += integration.observation_time;
+            }
+            latest_observation.frequencies = current_spectra[0].frequencies.clone();
+            latest_observation.spectra = latest_observation
+                .spectra
+                .into_iter()
+                .map(|value| value / current_spectra.len() as f32)
+                .collect();
+            Some(latest_observation)
+        };
+
         Ok(TelescopeInfo {
             status,
             current_horizontal,
             commanded_horizontal: target_horizontal,
             current_target: target,
             most_recent_error,
+            measurement_in_progress: receiver_configuration.integrate,
+            latest_observation,
         })
     }
 
@@ -160,6 +252,12 @@ impl TelescopeControl for FakeTelescopeControl {
             telescope.horizontal.altitude += (target_horizontal.altitude
                 - current_horizontal.altitude)
                 .clamp(-max_delta_angle, max_delta_angle);
+        }
+
+        if telescope.receiver_configuration.integrate {
+            telescope
+                .current_spectra
+                .push(create_fake_spectra(delta_time))
         }
 
         Ok(())

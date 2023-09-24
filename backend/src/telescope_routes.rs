@@ -11,6 +11,7 @@ where
         .or(filters::get_telescope_target(telescope.clone()))
         .or(filters::set_telescope_target(telescope.clone()))
         .or(filters::get_telescope_info(telescope.clone()))
+        .or(filters::set_receiver_configuration(telescope.clone()))
 }
 
 mod filters {
@@ -55,6 +56,19 @@ mod filters {
             .and_then(handlers::set_telescope_target)
     }
 
+    pub fn set_receiver_configuration<Telescope>(
+        telescope: Telescope,
+    ) -> impl Filter<Extract = (impl Reply,), Error = Rejection> + Clone
+    where
+        Telescope: TelescopeControl + Clone,
+    {
+        warp::path!("api" / "telescope" / String / "receiver")
+            .and(warp::post())
+            .and(warp::body::json())
+            .and(with_telescope_control(telescope))
+            .and_then(handlers::set_receiver_configuration)
+    }
+
     pub fn get_telescope_info<Telescope>(
         telescope: Telescope,
     ) -> impl Filter<Extract = (impl Reply,), Error = Rejection> + Clone
@@ -79,7 +93,7 @@ mod filters {
 
 mod handlers {
     use crate::telescope::TelescopeControl;
-    use common::TelescopeTarget;
+    use common::{ReceiverConfiguration, TelescopeTarget};
     use warp::{Rejection, Reply};
 
     pub async fn get_telescope_direction<Telescope>(
@@ -113,6 +127,20 @@ mod handlers {
         Telescope: TelescopeControl,
     {
         let result = telescope.set_target(&id, target).await;
+        Ok(warp::reply::json(&result))
+    }
+
+    pub async fn set_receiver_configuration<Telescope>(
+        id: String,
+        receiver_configuration: ReceiverConfiguration,
+        telescope: Telescope,
+    ) -> Result<impl Reply, Rejection>
+    where
+        Telescope: TelescopeControl,
+    {
+        let result = telescope
+            .set_receiver_configuration(&id, receiver_configuration)
+            .await;
         Ok(warp::reply::json(&result))
     }
 
