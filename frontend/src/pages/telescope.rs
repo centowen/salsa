@@ -1,8 +1,7 @@
 use crate::components::target_selector::TargetSelector;
 use crate::services::emit_info;
-use common::{TelescopeInfo, TelescopeStatus, TelescopeTarget};
+use common::{TelescopeError, TelescopeInfo, TelescopeStatus, TelescopeTarget};
 use gloo_net::http::Request;
-use log::debug;
 use std::time::Duration;
 use yew::platform::spawn_local;
 use yew::prelude::*;
@@ -12,14 +11,33 @@ pub struct Props {
     pub id: String,
 }
 
-pub struct TelescopePage {
-    target: TelescopeTarget,
-    info: Option<TelescopeInfo>,
+#[derive(Debug, Copy, Clone)]
+pub enum TelescopePageError {
+    RequestError,
+    TargetBelowHorizon,
 }
 
-#[derive(Debug, Clone, Copy)]
+impl From<TelescopeError> for TelescopePageError {
+    fn from(value: TelescopeError) -> Self {
+        match value {
+            TelescopeError::TargetBelowHorizon { .. } => TelescopePageError::TargetBelowHorizon,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct TelescopePage {
+    configured_target: TelescopeTarget,
+    tracking_configured: bool,
+    info: Option<TelescopeInfo>,
+    most_recent_error: Option<TelescopePageError>,
+    waiting_for_command: bool,
+}
+
+#[derive(Debug, Copy, Clone)]
 pub enum Message {
-    ChangeTarget(TelescopeTarget),
+    ChangeTarget((TelescopeTarget, bool)),
+    ReceiveChangeTargetResult(Result<TelescopeTarget, TelescopePageError>),
     UpdateInfo(TelescopeInfo),
 }
 
@@ -30,45 +48,96 @@ impl Component for TelescopePage {
     fn create(ctx: &Context<Self>) -> Self {
         let info_cb = ctx.link().callback(Message::UpdateInfo);
         let endpoint = format!("http://localhost:3000/telescope/{}", &ctx.props().id);
-        emit_info(info_cb, endpoint, Duration::from_millis(1000));
+        emit_info(info_cb, endpoint, Duration::from_millis(200));
         Self {
-            target: TelescopeTarget::Parked,
+            configured_target: TelescopeTarget::Parked,
+            tracking_configured: false,
             info: None,
+            most_recent_error: None,
+            waiting_for_command: false,
         }
     }
 
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
-            Message::ChangeTarget(target) => {
-                debug!("Updating target for {} to {:?}", &ctx.props().id, &target);
+            Message::ChangeTarget((target, track)) => {
+                if self.configured_target == target && self.tracking_configured == track {
+                    return false;
+                }
+
+                self.configured_target = target;
+                self.tracking_configured = track;
+                self.waiting_for_command = true;
+
                 let endpoint = format!("http://localhost:3000/telescope/target/{}", ctx.props().id);
 
                 {
                     let target = target;
                     let id = ctx.props().id.clone();
+                    let result_callback = ctx.link().callback(Message::ReceiveChangeTargetResult);
+
                     spawn_local(async move {
-                        let response = Request::post(&endpoint)
+                        let result = match Request::post(&endpoint)
                             .json(&target)
                             .expect("Could not serialize target")
                             .send()
-                            .await;
-                        if let Err(error_response) = response {
-                            log::error!("Failed to set target for {}: {}", &id, error_response)
-                        }
+                            .await
+                        {
+                            Ok(response) => match response
+                                .json::<Result<TelescopeTarget, TelescopeError>>()
+                                .await
+                                .expect("Could not deserialize set_target result")
+                            {
+                                Ok(_) => Ok(target),
+                                Err(error) => Err(error.into()),
+                            },
+                            Err(error_response) => {
+                                log::error!("Failed to set target for {}: {}", &id, error_response);
+                                Err(TelescopePageError::RequestError)
+                            }
+                        };
+
+                        result_callback.emit(result);
                     });
                 }
 
-                self.target = target;
                 true
             }
             Message::UpdateInfo(telescope_info) => {
-                if self.info != Some(telescope_info) {
-                    log::info!("Received new telescope info: {:?}", telescope_info);
-                    self.info = Some(telescope_info);
-                    true
-                } else {
-                    false
+                let mut updated = false;
+
+                if !self.waiting_for_command {
+                    let is_tracking = telescope_info.status != TelescopeStatus::Idle;
+                    let target = telescope_info.current_target;
+                    if self.tracking_configured != is_tracking {
+                        self.tracking_configured = is_tracking;
+                        updated = true;
+                    }
+                    if is_tracking && self.configured_target != target {
+                        self.configured_target = target;
+                        updated = true;
+                    }
                 }
+
+                if self.info != Some(telescope_info) {
+                    self.info = Some(telescope_info);
+                    updated = true;
+                }
+
+                updated
+            }
+            Message::ReceiveChangeTargetResult(result) => {
+                match result {
+                    Ok(_) => {
+                        self.info = None;
+                        self.most_recent_error = None;
+                    }
+                    Err(error) => {
+                        self.most_recent_error = Some(error);
+                    }
+                }
+                self.waiting_for_command = false;
+                true
             }
         }
     }
@@ -98,15 +167,31 @@ impl Component for TelescopePage {
                 info.current_horizontal.altitude.to_degrees()
             )
         });
+
+        let (track, target) = (self.tracking_configured, self.configured_target);
+
+        let error_text = if let Some(error) = self.most_recent_error {
+            format!(
+                " ({})",
+                match error {
+                    TelescopePageError::RequestError => "Failed to send request",
+                    TelescopePageError::TargetBelowHorizon =>
+                        "Could not track selected target, it is currently below the horizon.",
+                }
+            )
+        } else {
+            "".to_string()
+        };
+
         html! {
             <div class="telescope">
                 <div class="telescope-name">
                     <h1>{ ctx.props().id.clone() }</h1>
                 </div>
                 <div class="telescope-status">
-                    {format!("Status: {}", telescope_status)}
+                    {format!("Status: {}{}", telescope_status, error_text)}
                 </div>
-                <TargetSelector target={self.target} on_target_change={change_target} />
+                <TargetSelector target={target} track={track} on_target_change={change_target} />
                 <div class="current-horizontal">
                     {format!("Commanded horizontal: {}", commanded_horizontal) }
                 </div>

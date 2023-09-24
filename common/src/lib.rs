@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::fmt::{Display, Formatter};
 
 pub mod coords;
 
@@ -39,6 +40,24 @@ pub struct TelescopeInfo {
     pub status: TelescopeStatus,
     pub commanded_horizontal: Direction,
     pub current_horizontal: Direction,
+    pub current_target: TelescopeTarget,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum TelescopeError {
+    TargetBelowHorizon { telescope_id: String },
+}
+
+impl Display for TelescopeError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let error_message = match self {
+            TelescopeError::TargetBelowHorizon { telescope_id: id } => format!(
+                "Failed to set target for telescope {}, target is below horizon.",
+                id
+            ),
+        };
+        f.write_str(&error_message)
+    }
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Debug, Copy, Clone)]

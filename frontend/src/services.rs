@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use common::{TelescopeInfo, WeatherInfo};
+use common::{TelescopeError, TelescopeInfo, WeatherInfo};
 use gloo_net::http::Request;
 use yew::platform::spawn_local;
 use yew::platform::time::sleep;
@@ -45,16 +45,16 @@ pub fn emit_info(
     spawn_local(async move {
         loop {
             match Request::get(&endpoint).send().await {
-                Ok(response) => match response.json().await {
+                Ok(response) => match response
+                    .json::<Result<TelescopeInfo, TelescopeError>>()
+                    .await
+                    .expect("Failed to deserialize response")
+                {
                     Ok(telescope_info) => {
                         info_callback.emit(telescope_info);
                     }
                     Err(error) => {
-                        log::error!(
-                            "Failed to deserialize response from {}: {}",
-                            &endpoint,
-                            error
-                        );
+                        log::error!("Got error response from {}: {}", &endpoint, error);
                     }
                 },
                 Err(error) => {
