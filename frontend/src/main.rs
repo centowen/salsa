@@ -81,10 +81,7 @@ impl Component for Salsa {
         html! {
             <div id="page">
                 <BrowserRouter>
-                    <header>
-                        <div id="logo"><Link<Route> to={Route::Home}>{"SALSA"}</Link<Route>></div>
-                        <NavBar />
-                    </header>
+                    <NavBar />
                     <Switch<Route> render={switch} />
                     <footer>
                         { "Made by weirdos 🦆" }
