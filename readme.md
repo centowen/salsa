@@ -37,7 +37,7 @@ The guide below is based on https://www.splitbrain.org/blog/2017-08/10-homeassis
 
     1. Go to duckdns.org and login (I use my github account)
         ![](docs/images/duckdns.png)
-    2. Create a new domain and set the ip to the machine you plan to serve salsa from. If you are developing it is probably a good idea to use an internal IP here that you can reach, e.g., use 192.168.0.... In this guide the domain will be salsa, replace with the name you selected. E.g. you can map salsa.duckdns.org -> 192.168.0.2
+    2. Create a new domain and set the ip to the machine you plan to serve salsa-12 from. If you are developing it is probably a good idea to use an internal IP here that you can reach, e.g., use 192.168.0.... In this guide the domain will be salsa-12, replace with the name you selected. E.g. you can map salsa-12.duckdns.org -> 192.168.0.2
         ![](docs/images/duckdns2.png)
         ![](docs/images/duckdns3.png)
 
@@ -155,7 +155,7 @@ The guide below is based on https://www.splitbrain.org/blog/2017-08/10-homeassis
     ./dehydrated -c
     ```
 
-5. Add or update `development/env.sh` with path to the certificate and private key from dehydrated. Change salsa to the name you opted for.
+5. Add or update `development/env.sh` with path to the certificate and private key from dehydrated. Change salsa-12 to the name you opted for.
 
     ```bash
     echo "export KEY_FILE_PATH=<path to dehydrated>/certs/salsa.duckdns.org/privkey.pem" >> ./development/env.sh
@@ -164,7 +164,7 @@ The guide below is based on https://www.splitbrain.org/blog/2017-08/10-homeassis
 
 6. Run backend with frontend script
 
-    ```shell
+    ```bash
     ./development/run-backend-with-frontend.sh
     ```
 
