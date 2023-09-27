@@ -33,43 +33,38 @@ If you want to work with authentication you should enable https. Otherwise passw
 
 The guide below is based on https://www.splitbrain.org/blog/2017-08/10-homeassistant_duckdns_letsencrypt
 
-1. Set up dns name for salsa (we will issue cert to this DNS)
+1. Set up dns name for salsa-12 (we will issue cert to this DNS)
 
-    1. Go to duckdns.org and login
-    2. Create a new domain and set the ip to the machine you plan to serve salsa from. If you are developing it is probably a good idea to use an internal IP here that you can reach, e.g., use 192.168.0.... In this guide the domain will be salsa, replace with the name you selected.
+    1. Go to duckdns.org and login (I use my github account)
+        ![](docs/images/duckdns.png)
+    2. Create a new domain and set the ip to the machine you plan to serve salsa from. If you are developing it is probably a good idea to use an internal IP here that you can reach, e.g., use 192.168.0.... In this guide the domain will be salsa, replace with the name you selected. E.g. you can map salsa.duckdns.org -> 192.168.0.2
+        ![](docs/images/duckdns2.png)
+        ![](docs/images/duckdns3.png)
 
 2. Download dehydrated
 
-    ```shell
+    ```bash
     git clone git@github.com:dehydrated-io/dehydrated.git
     cd dehydrated
     ```
 
-3. Configure dehydrated
+3. Configure dehydrated. 
+    1. Set domain to the one created above.
 
-    1. Enter the dehydrated directory
-        ```shell
-        cd dehydrated
+        ```bash
+        echo salsa-12.duckdns.org > domains.txt
         ```
-    2. Set domain to the one created above.
-        ```shell
-        echo "salsa.duckdns.org" >> domains.txt
-        ```
-    3. Create a file called `config` with
-        ```
-        CHALLENGETYPE="dns-01"
-        HOOK="${BASEDIR}/hook.sh"
-        ```
-    4. Create the `hook.sh` refenced above. This will tell dehydrated how to access your duckdns domain
 
-        ```
+    2. A script called `hook.sh` with the following content.
+
+        ```bash
         #!/usr/bin/env bash
         set -e
         set -u
         set -o pipefail
 
-        domain="salsa"
-        token="your-duckdns-token"
+        domain="salsa-12"
+        token="you-duckdns-token"
 
         case "$1" in
             "deploy_challenge")
@@ -96,11 +91,61 @@ The guide below is based on https://www.splitbrain.org/blog/2017-08/10-homeassis
                 ;;
         esac
         ```
+    3. Add a file called config with the challengetype and path to the hook script
 
-    5. Enter token and domain in the file. Token can be copied from duckdns.org page.
-    6. Register for certificate
+        ```bash
+        CHALLENGETYPE="dns-01"
+        HOOK="${BASEDIR}/hook.sh"
+        ```
 
-        ```shell
+    4. Register with let's encrypt
+
+        ```bash
+        ./dehydrated --register  --accept-terms
+        ```
+
+    5. See a copy pastable bash command see below. You need to set `DOMAIN` and `TOKEN` first.
+
+        ```bash
+        echo $DOMAIN.duckdns.org > domains.txt
+        cat >config <<EOL
+        CHALLENGETYPE="dns-01"
+        HOOK="\${BASEDIR}/hook.sh"
+        EOL
+        cat >hook.sh <<EOL
+        #!/usr/bin/env bash
+        set -e
+        set -u
+        set -o pipefail
+
+        domain="$DOMAIN"
+        token="$TOKEN"
+
+        case "\$1" in
+            "deploy_challenge")
+                curl "https://www.duckdns.org/update?domains=\$domain&token=\$token&txt=\$4"
+                echo
+                ;;
+            "clean_challenge")
+                curl "https://www.duckdns.org/update?domains=\$domain&token=\$token&txt=removed&clear=true"
+                echo
+                ;;
+            "deploy_cert")
+                echo "Update certificate"
+                echo
+                ;;
+            "unchanged_cert")
+                ;;
+            "startup_hook")
+                ;;
+            "exit_hook")
+                ;;
+            *)
+                echo Unknown hook "\${1}"
+                exit 0
+                ;;
+        esac
+        EOL
         ./dehydrated --register  --accept-terms
         ```
 
