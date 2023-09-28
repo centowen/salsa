@@ -10,7 +10,7 @@ async-trait = "0.1.51"
 axum-server = { version = "0.5.0", features = ["tls-rustls"] }
 axum = { version = "0.6.18", features = ["json", "headers"] }#astro = "2.0.0"
 chrono = { version = "0.4.2", features = ["serde"] }
-clap = {version = "4.1.6", features = ["derive"] }
+clap = {version = "4.1.6", features = ["derive", "env"] }
 common = { version = "0.1.0", path = "../common" }
 env_logger = "0.10.0"
 hex-literal = { version="0.4.1" }

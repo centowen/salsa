@@ -1,3 +1,6 @@
+#!/usr/bin/env bash
+set -e
+
 if [ ! -e "database.json" ]; then
     cp -r development/database.json database.json
 fi
