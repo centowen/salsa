@@ -5,12 +5,12 @@ use crate::Route;
 
 #[function_component(NavBar)]
 pub fn navbar() -> Html {
-    let hide_menu = use_state(|| true);
+    let hidden_menu = use_state(|| true);
 
     let toggle_menu = Callback::from({
-        let hide_menu = hide_menu.clone();
+        let hidden_menu = hidden_menu.clone();
         move |_| {
-            hide_menu.set(!*hide_menu);
+            hidden_menu.set(!*hidden_menu);
         }
     });
 
@@ -20,7 +20,7 @@ pub fn navbar() -> Html {
                 <div class="logo"><Link<Route> to={Route::Home}>{"SALSA"}</Link<Route>></div>
                 <a href="#" onclick={ toggle_menu } class="burger"><i class="fa fa-bars" /></a>
             </div>
-            <nav class={ classes!(hide_menu.then_some("hide-menu")) }>
+            <nav class={ classes!(hidden_menu.then_some("hidden-menu")) }>
                 <menu>
                     <li>
                         <Link<Route> to={Route::Observe}>{ "Observe" }</Link<Route>>
@@ -36,7 +36,7 @@ pub fn navbar() -> Html {
                     </li>
                 </menu>
             </nav>
-            <nav class={ classes!(hide_menu.then_some("hide-menu")) }>
+            <nav class={ classes!(hidden_menu.then_some("hidden-menu")) }>
                 <menu>
                     <li><a href="#">{ "Login" }</a></li>
                 </menu>

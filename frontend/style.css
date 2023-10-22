@@ -78,42 +78,43 @@ header .logo-burger {
     display: flex;
     flex-direction: row;
     justify-content: space-between;
+    align-items: center;
+    padding: 20px;
 }
 header .logo {
     color: var(--secondary-color);
     font-size: 36px;
     font-family: 'Audiowide', cursive;
-    margin: 0 auto 0 20px;
+    margin-right: auto;
     display: flex;
     align-items: center;
     justify-content: center;
 }
-header .logo a {
+
+header a {
     color: inherit;
     text-decoration: none;
 }
-
-nav menu {
-    height: 100%;
+nav {
     display: flex;
     flex-direction: column;
-    align-items: center;
+    align-items: stretch;
+}
+nav menu {
+    display: flex;
+    flex-direction: column;
     list-style: none;
-    padding: 0;
     justify-content: space-between;
     font-weight: 400;
 }
 nav menu li {
-    height: 100%;
+    padding: 20px 0;
+}
+nav menu li a {
+    padding: 20px;
 }
 nav menu li:hover {
     background-color: var(--primary-color-light);
-}
-nav menu li a {
-    padding: 0px 20px;
-    color: inherit;
-    text-decoration: none;
-    height: 100%;
 }
 #login {
     margin: 0 20px;
@@ -221,12 +222,16 @@ footer {
     header {
         flex-direction: row;
     }
+    header nav {
+        flex-direction: row;
+    }
     header nav menu {
         flex-direction: row;
+        align-items: center;
     }
 }
 @media only screen and (max-width: 768px) {
-    .hide-menu {
+    .hidden-menu {
         display: none;
     }
 }
