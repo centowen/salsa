@@ -29,20 +29,8 @@ body {
     height: 100%;
     display: flex;
     flex-direction: column;
-}
-
-/* Tablet Styles */
-@media only screen and (min-width: 401px) and (max-width: 960px) {
-
-}
-
-/* Desktop styles */
-@media only screen and (min-width: 961px) {
-    #page {
-        width: 960px;
-        margin: 0 auto;
-        /* box-shadow: 0 0 6px var(--gray300); */
-    }
+    max-width: 960px;
+    margin: 0 auto;
 }
 
 .section {
@@ -84,54 +72,50 @@ header {
     background-color: var(--primary-color);
     display: flex;
     justify-content: space-between;
-    flex-direction: row;
-    height: 80px;
+    flex-direction: column;
 }
-
-#logo {
+header .logo-burger {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px;
+}
+header .logo {
     color: var(--secondary-color);
     font-size: 36px;
     font-family: 'Audiowide', cursive;
-    margin: 0 20px;
+    margin-right: auto;
     display: flex;
-    align-items:center;
-    justify-content:center;
+    align-items: center;
+    justify-content: center;
 }
-#logo a {
+
+header a {
     color: inherit;
     text-decoration: none;
 }
-
-nav menu {
-    height: 100%;
+nav {
     display: flex;
-    align-items: center;
+    flex-direction: column;
+    align-items: stretch;
+}
+nav menu {
+    display: flex;
+    flex-direction: column;
     list-style: none;
-    padding: 0;
-    justify-content: center;
+    justify-content: space-between;
     font-weight: 400;
 }
-
 nav menu li {
-    flex-grow: 1;
-    height: 100%;
+    padding: 20px 0;
 }
-
+nav menu li a {
+    padding: 20px;
+}
 nav menu li:hover {
     background-color: var(--primary-color-light);
 }
-
-nav menu li a {
-    padding: 0px 20px;
-    color: inherit;
-    font-size: 16px;
-    text-decoration: none;
-    height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
 #login {
     margin: 0 20px;
 }
@@ -225,4 +209,33 @@ footer {
 }
 .calendar .other-month a {
     color: #999999;
+}
+
+/* Threshold for disabling burger menu */
+@media only screen and (min-width: 768px) {
+    .burger {
+        display: none;
+    }
+    nav menu li:last-child {
+        margin-left: auto;
+    }
+    header {
+        flex-direction: row;
+    }
+    header nav {
+        flex-direction: row;
+    }
+    header nav menu {
+        flex-direction: row;
+        align-items: center;
+    }
+}
+@media only screen and (max-width: 768px) {
+    .hidden-menu {
+        display: none;
+    }
+}
+
+/* Desktop styles */
+@media only screen and (min-width: 961px) {
 }
