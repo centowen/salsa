@@ -89,7 +89,7 @@ fn calendar(props: &CalendarProps) -> Html {
                 dates.iter().take(7).map(|d| {
                     html! {
                         <td>
-                            { d.weekday() }
+                            { d.weekday().to_string() }
                         </td>
                     }
                 }).collect::<Html>()
@@ -115,7 +115,7 @@ fn calendar(props: &CalendarProps) -> Html {
                                             let callback = callback.clone();
                                             move |event: MouseEvent| {event.prevent_default(); callback.emit(d)}
                                         }>
-                                            { d.format("%d") }
+                                            { d.format("%d").to_string() }
                                         </a>
                                     </td>
                                 }
@@ -324,30 +324,27 @@ pub fn make_booking_page() -> Html {
     };
 
     let telescope_names = use_state(|| Vec::<String>::new());
-    use_effect_with_deps(
-        {
-            let telescope_names2 = telescope_names.clone();
-            |_| {
-                spawn_local(async move {
-                    match Request::get("/api/telescopes").send().await {
-                        Ok(response) => {
-                            log::info!("Got response: {:?}", response);
-                            let value = response
-                                .json::<Vec<TelescopeInfo>>()
-                                .await
-                                .expect("Failed to deserialize response");
-                            log::info!("Got response value: {:?}", value);
-                            telescope_names2.set(value.into_iter().map(|t| t.id).collect());
-                        }
-                        Err(error) => {
-                            log::error!("Failed to fetch: {}", error);
-                        }
+    use_effect_with((), {
+        let telescope_names2 = telescope_names.clone();
+        |_| {
+            spawn_local(async move {
+                match Request::get("/api/telescopes").send().await {
+                    Ok(response) => {
+                        log::info!("Got response: {:?}", response);
+                        let value = response
+                            .json::<Vec<TelescopeInfo>>()
+                            .await
+                            .expect("Failed to deserialize response");
+                        log::info!("Got response value: {:?}", value);
+                        telescope_names2.set(value.into_iter().map(|t| t.id).collect());
                     }
-                })
-            }
-        },
-        (),
-    );
+                    Err(error) => {
+                        log::error!("Failed to fetch: {}", error);
+                    }
+                }
+            })
+        }
+    });
 
     let NotificationAreaProps { message, level } = (*notifications).clone();
     html!(
