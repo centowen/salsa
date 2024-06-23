@@ -1,11 +1,13 @@
 use axum::{routing::get, Router};
-use axum::response::Html;
+use axum::response::{Html, IntoResponse};
 use axum_server::tls_rustls::RustlsConfig;
+use askama_axum::Template;
 use clap::Parser;
 use database::create_database_from_directory;
 use std::net::SocketAddr;
 use telescope::create_telescope_collection;
 use tower_http::services::ServeDir;
+use common::Booking;
 
 mod booking_routes;
 mod database;
@@ -51,6 +53,7 @@ async fn main() {
     let mut app = Router::new()
         .route("/api/ping", get(ping))
         .route("/api/weather", get(weather::get_weather_info))
+        .route("/bookings", get(bookings))
         .nest("/api/telescopes", telescope_routes::routes(telescopes))
         .nest("/api/bookings", booking_routes::routes(database.clone()));
 
@@ -90,3 +93,12 @@ async fn ping() -> &'static str {
     "pong"
 }
 
+#[derive(Template)]
+#[template(path = "bookings.html")]
+struct BookingsTemplate {
+    bookings: Vec<common::Booking>,
+}
+
+async fn bookings() -> impl IntoResponse {
+    BookingsTemplate { bookings: Vec::new() }
+}

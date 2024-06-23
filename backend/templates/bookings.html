@@ -1,0 +1,12 @@
+<div class="section light">
+    <div class="bookings" hx-get="">
+      {% for booking in bookings %}
+        <div>
+          {{ booking.start_time.naive_local() }}:
+          {{ booking.telescope_name }}
+          booked by
+          {{ booking.user_name }}
+        </div>
+      {% endfor %}
+    </div>
+</div>
