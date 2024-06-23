@@ -89,7 +89,7 @@ fn calendar(props: &CalendarProps) -> Html {
                 dates.iter().take(7).map(|d| {
                     html! {
                         <td>
-                            { d.weekday() }
+                            { d.weekday().to_string() }
                         </td>
                     }
                 }).collect::<Html>()
@@ -115,7 +115,7 @@ fn calendar(props: &CalendarProps) -> Html {
                                             let callback = callback.clone();
                                             move |event: MouseEvent| {event.prevent_default(); callback.emit(d)}
                                         }>
-                                            { d.format("%d") }
+                                            { d.format("%d").to_string() }
                                         </a>
                                     </td>
                                 }
@@ -324,7 +324,8 @@ pub fn make_booking_page() -> Html {
     };
 
     let telescope_names = use_state(|| Vec::<String>::new());
-    use_effect_with_deps(
+    use_effect_with(
+        (),
         {
             let telescope_names2 = telescope_names.clone();
             |_| {
@@ -346,7 +347,6 @@ pub fn make_booking_page() -> Html {
                 })
             }
         },
-        (),
     );
 
     let NotificationAreaProps { message, level } = (*notifications).clone();
