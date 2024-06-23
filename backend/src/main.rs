@@ -1,4 +1,5 @@
 use axum::{routing::get, Router};
+use axum::response::Html;
 use axum_server::tls_rustls::RustlsConfig;
 use clap::Parser;
 use database::create_database_from_directory;
@@ -88,3 +89,4 @@ async fn ping() -> &'static str {
     log::info!("ping");
     "pong"
 }
+
