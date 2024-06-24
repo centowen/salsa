@@ -2,16 +2,10 @@ use crate::database::{DataBase, Storage};
 use crate::template::HtmlTemplate;
 use askama::Template;
 use axum::Form;
-use axum::{
-    extract::{Query, State},
-    response::IntoResponse,
-    routing::get,
-    Router,
-};
-use chrono::{DateTime, Duration, NaiveDate, NaiveDateTime, NaiveTime, Utc};
+use axum::{extract::State, response::IntoResponse, routing::get, Router};
+use chrono::{DateTime, Duration, NaiveDate, NaiveDateTime, NaiveTime, TimeZone, Utc};
 use common::Booking;
 use serde::Deserialize;
-use std::collections::HashMap;
 
 pub fn routes(database: DataBase<impl Storage + 'static>) -> Router {
     Router::new()
@@ -26,7 +20,7 @@ struct BookingsTemplate {
     telescope_names: Vec<String>,
 }
 
-pub async fn get_bookings<StorageType>(State(db): State<DataBase<StorageType>>) -> impl IntoResponse
+async fn get_bookings<StorageType>(State(db): State<DataBase<StorageType>>) -> impl IntoResponse
 where
     StorageType: Storage,
 {
@@ -56,7 +50,7 @@ struct BookingForm {
     duration: i64,
 }
 
-pub async fn create_booking<StorageType>(
+async fn create_booking<StorageType>(
     State(db): State<DataBase<StorageType>>,
     Form(booking_form): Form<BookingForm>,
 ) -> impl IntoResponse
@@ -65,9 +59,8 @@ where
 {
     dbg!(&booking_form);
 
-    // PETI: This can surely by done in a neater way.
     let naive_datetime = NaiveDateTime::new(booking_form.start_date, booking_form.start_time);
-    let start_time: DateTime<Utc> = DateTime::from_utc(naive_datetime, Utc);
+    let start_time: DateTime<Utc> = Utc.from_utc_datetime(&naive_datetime);
     let end_time = start_time + Duration::hours(booking_form.duration);
 
     let booking = Booking {
