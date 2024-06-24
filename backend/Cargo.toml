@@ -25,8 +25,7 @@ tokio-util = { version = "0.7.7" }
 tokio = { version = "1.24.2", features = ["macros", "rt-multi-thread"] }
 tower-http = { version = "0.4.0", features = ["full"] }
 uhd= { git="https://github.com/centowen/uhd-rust.git", branch="remove_enumerate_registers" }
-askama = { version = "0.12", features = ["with-axum"]}
-askama_axum = "0.4.0"
+askama = "0.12"
 
 [dev-dependencies]
 hyper = "0.14.27"

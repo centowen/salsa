@@ -1,22 +1,22 @@
 use axum::{routing::get, Router};
-use axum::response::{Html, IntoResponse};
 use axum_server::tls_rustls::RustlsConfig;
-use askama_axum::Template;
 use clap::Parser;
 use database::create_database_from_directory;
 use std::net::SocketAddr;
 use telescope::create_telescope_collection;
 use tower_http::services::ServeDir;
-use common::Booking;
 
+mod booking_api_routes;
 mod booking_routes;
 mod database;
 mod fake_telescope;
 mod salsa_telescope;
 mod telescope;
+mod telescope_api_routes;
 mod telescope_controller;
 mod telescope_routes;
 mod telescope_tracker;
+mod template;
 mod weather;
 
 #[derive(Parser, Debug)]
@@ -51,19 +51,17 @@ async fn main() {
     let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
 
     let mut app = Router::new()
-        .route("/api/ping", get(ping))
-        .route("/api/weather", get(weather::get_weather_info))
-        .route("/bookings", get(bookings))
-        .nest("/api/telescopes", telescope_routes::routes(telescopes))
-        .nest("/api/bookings", booking_routes::routes(database.clone()));
+        .route("/weather", get(weather::get_weather_info))
+        .nest("/bookings", booking_routes::routes(database.clone()))
+        .nest("/telescopes", telescope_routes::routes(telescopes.clone()))
+        .nest("/api/telescopes", telescope_api_routes::routes(telescopes))
+        .nest("/api/bookings", booking_api_routes::routes(database.clone()));
 
     if let Some(frontend_path) = args.frontend_path {
         log::info!("serving frontend from {}", frontend_path);
         let frontend_service = ServeDir::new(frontend_path);
         app = app.fallback_service(frontend_service)
     }
-    // .route("/api/token", post(token))
-    // .route("/api/info", get(info))
 
     log::info!("listening on {}", addr);
     if let Some(key_file_path) = args.key_file_path {
@@ -86,19 +84,4 @@ async fn main() {
             .await
             .unwrap();
     }
-}
-
-async fn ping() -> &'static str {
-    log::info!("ping");
-    "pong"
-}
-
-#[derive(Template)]
-#[template(path = "bookings.html")]
-struct BookingsTemplate {
-    bookings: Vec<common::Booking>,
-}
-
-async fn bookings() -> impl IntoResponse {
-    BookingsTemplate { bookings: Vec::new() }
 }
