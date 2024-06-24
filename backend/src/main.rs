@@ -55,7 +55,10 @@ async fn main() {
         .nest("/bookings", booking_routes::routes(database.clone()))
         .nest("/telescopes", telescope_routes::routes(telescopes.clone()))
         .nest("/api/telescopes", telescope_api_routes::routes(telescopes))
-        .nest("/api/bookings", booking_api_routes::routes(database.clone()));
+        .nest(
+            "/api/bookings",
+            booking_api_routes::routes(database.clone()),
+        );
 
     if let Some(frontend_path) = args.frontend_path {
         log::info!("serving frontend from {}", frontend_path);

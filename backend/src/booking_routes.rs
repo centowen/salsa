@@ -1,21 +1,21 @@
 use crate::database::{DataBase, Storage};
 use crate::template::HtmlTemplate;
 use askama::Template;
+use axum::Form;
 use axum::{
-    extract::State,
-    // http::StatusCode,
+    extract::{Query, State},
     response::IntoResponse,
     routing::get,
     Router,
 };
+use chrono::{DateTime, Duration, NaiveDate, NaiveDateTime, NaiveTime, Utc};
 use common::Booking;
+use serde::Deserialize;
+use std::collections::HashMap;
 
 pub fn routes(database: DataBase<impl Storage + 'static>) -> Router {
     Router::new()
-        .route("/",
-               get(get_bookings)
-               // .post(add_booking_route)
-               )
+        .route("/", get(get_bookings).post(create_booking))
         .with_state(database)
 }
 
@@ -23,6 +23,7 @@ pub fn routes(database: DataBase<impl Storage + 'static>) -> Router {
 #[template(path = "bookings.html")]
 struct BookingsTemplate {
     bookings: Vec<Booking>,
+    telescope_names: Vec<String>,
 }
 
 pub async fn get_bookings<StorageType>(State(db): State<DataBase<StorageType>>) -> impl IntoResponse
@@ -34,32 +35,88 @@ where
         .await
         .expect("As long as no one is manually editing the database, this should never fail.");
     let bookings = data_model.bookings;
+    let telescope_names: Vec<String> = data_model
+        .telescopes
+        .iter()
+        .map(|t| t.name.clone())
+        .collect();
     dbg!(&bookings);
-    HtmlTemplate(BookingsTemplate { bookings })
+    HtmlTemplate(BookingsTemplate {
+        bookings,
+        telescope_names,
+    })
 }
 
-// pub async fn add_booking(db: DataBase<impl Storage>, booking: Booking) -> AddBookingResult {
-//     if db
-//         .get_data()
-//         .await?
-//         .bookings
-//         .iter()
-//         .filter(|b| b.telescope_name == booking.telescope_name && b.overlaps(&booking))
-//         .any(|_| true)
-//     {
-//         // There is already a booking of the selected telescope overlapping
-//         // with the new booking. The new booking must be rejected.
-//         return Err(AddBookingError::Conflict);
-//     }
+#[derive(Deserialize, Debug)]
+struct BookingForm {
+    name: String,
+    start_date: NaiveDate,
+    start_time: NaiveTime,
+    telescope: String,
+    duration: i64,
+}
 
-//     db.update_data(|mut data_model| {
-//         data_model.bookings.push(booking);
-//         data_model
-//     })
-//     .await?;
+pub async fn create_booking<StorageType>(
+    State(db): State<DataBase<StorageType>>,
+    Form(booking_form): Form<BookingForm>,
+) -> impl IntoResponse
+where
+    StorageType: Storage,
+{
+    dbg!(&booking_form);
 
-//     Ok(db.get_data().await?.bookings.len() as u64)
-// }
+    // PETI: This can surely by done in a neater way.
+    let naive_datetime = NaiveDateTime::new(booking_form.start_date, booking_form.start_time);
+    let start_time: DateTime<Utc> = DateTime::from_utc(naive_datetime, Utc);
+    let end_time = start_time + Duration::hours(booking_form.duration);
+
+    let booking = Booking {
+        start_time,
+        end_time,
+        user_name: booking_form.name,
+        telescope_name: booking_form.telescope,
+    };
+    let mut skip = false;
+    if db
+        .get_data()
+        // Error handling!
+        .await
+        .expect("Failed to get data")
+        .bookings
+        .iter()
+        .filter(|b| b.telescope_name == booking.telescope_name && b.overlaps(&booking))
+        .any(|_| true)
+    {
+        // There is already a booking of the selected telescope overlapping
+        // with the new booking. The new booking must be rejected.
+        skip = true;
+    }
+
+    if !skip {
+        db.update_data(|mut data_model| {
+            data_model.bookings.push(booking);
+            data_model
+        })
+        .await
+        .expect("failed to insert item into db")
+    }
+
+    let data_model = db
+        .get_data()
+        .await
+        .expect("As long as no one is manually editing the database, this should never fail.");
+    let bookings = data_model.bookings;
+    let telescope_names: Vec<String> = data_model
+        .telescopes
+        .iter()
+        .map(|t| t.name.clone())
+        .collect();
+
+    HtmlTemplate(BookingsTemplate {
+        bookings,
+        telescope_names,
+    })
+}
 
 // pub async fn add_booking_route(
 //     State(db): State<DataBase<impl Storage>>,
