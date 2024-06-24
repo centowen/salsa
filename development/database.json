@@ -1,5 +1,35 @@
 {
     "bookings": [
+        {
+            "start_time": "2024-02-01T01:01:01.123Z",
+            "end_time": "2024-02-01T02:01:01.123Z",
+            "telescope_name": "fake",
+            "user_name": "morg"
+        },
+        {
+            "start_time": "2024-05-01T03:01:01.123Z",
+            "end_time": "2024-05-01T02:04:01.123Z",
+            "telescope_name": "fake",
+            "user_name": "bengt"
+        },
+        {
+            "start_time": "2024-07-01T01:01:01.123Z",
+            "end_time": "2024-07-01T02:01:01.123Z",
+            "telescope_name": "fake",
+            "user_name": "freid"
+        },
+        {
+            "start_time": "2024-08-01T01:01:01.123Z",
+            "end_time": "2024-09-01T02:01:01.123Z",
+            "telescope_name": "fake",
+            "user_name": "giffel"
+        },
+        {
+            "start_time": "2024-12-01T01:01:01.123Z",
+            "end_time": "2025-01-01T02:01:01.123Z",
+            "telescope_name": "fake",
+            "user_name": "thak"
+        }
     ],
     "telescopes": [
         {
