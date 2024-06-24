@@ -4,12 +4,12 @@ use clap::Parser;
 use database::create_database_from_directory;
 use std::net::SocketAddr;
 use telescope::create_telescope_collection;
-use tower_http::services::ServeDir;
 
 mod booking_api_routes;
 mod booking_routes;
 mod database;
 mod fake_telescope;
+mod index;
 mod salsa_telescope;
 mod telescope;
 mod telescope_api_routes;
@@ -22,10 +22,6 @@ mod weather;
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
-    /// Path to packaged wasm app
-    #[arg(short, long, env = "FRONTEND_PATH")]
-    frontend_path: Option<String>,
-
     #[arg(short, long, env = "KEY_FILE_PATH")]
     key_file_path: Option<String>,
 
@@ -50,7 +46,8 @@ async fn main() {
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
 
-    let mut app = Router::new()
+    let app = Router::new()
+        .route("/", get(index::get_index))
         .route("/weather", get(weather::get_weather_info))
         .nest("/bookings", booking_routes::routes(database.clone()))
         .nest("/telescopes", telescope_routes::routes(telescopes.clone()))
@@ -59,12 +56,6 @@ async fn main() {
             "/api/bookings",
             booking_api_routes::routes(database.clone()),
         );
-
-    if let Some(frontend_path) = args.frontend_path {
-        log::info!("serving frontend from {}", frontend_path);
-        let frontend_service = ServeDir::new(frontend_path);
-        app = app.fallback_service(frontend_service)
-    }
 
     log::info!("listening on {}", addr);
     if let Some(key_file_path) = args.key_file_path {
