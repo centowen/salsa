@@ -1,6 +1,6 @@
 <div class="section light">
     <h2>Bookings</h2>
-    <div class="bookings" hx-get="">
+    <div class="bookings">
       {% for booking in bookings %}
         <div>
           {{ booking.start_time.naive_local() }}:
