@@ -1,0 +1,32 @@
+<div class="section light" id="bookings-container">
+  <h2>Bookings</h2>
+  <div class="bookings">
+    {% for booking in bookings %}
+    <div>
+      {{ booking.start_time.naive_local() }}: {{ booking.telescope_name }}
+      booked by {{ booking.user_name }}
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="form">
+    <form hx-post="/bookings" hx-target="#page">
+      <label for="name">Name</label>
+      <input id="name" name="name" type="text">
+      <label for="start_date">Date</label>
+      <input type="date" id="start_date" name="start_date">
+      <label for="start_time">Time</label>
+      <input type="time" id="start_time" name="start_time">
+      <label for="duration">Duration</label>
+      <input type="text" id="duration" name="duration">
+      <label for="telescope">Telescope</label>
+      <select name="telescope" id="telescope">
+        <option value="">Any telescope</option>
+        {% for name in telescope_names %}
+        <option value="{{ name }}">{{ name }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit">Book</button>
+    </form>
+  </div>
+</div>
