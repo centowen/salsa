@@ -4,6 +4,7 @@ use clap::Parser;
 use database::create_database_from_directory;
 use std::net::SocketAddr;
 use telescope::create_telescope_collection;
+use tower_http::services::ServeDir;
 
 mod booking_api_routes;
 mod booking_routes;
@@ -46,7 +47,7 @@ async fn main() {
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
 
-    let app = Router::new()
+    let mut app = Router::new()
         .route("/", get(index::get_index))
         .route("/weather", get(weather::get_weather_info))
         .nest("/bookings", booking_routes::routes(database.clone()))
@@ -56,6 +57,11 @@ async fn main() {
             "/api/bookings",
             booking_api_routes::routes(database.clone()),
         );
+
+    let assets_path = "assets";
+    log::info!("serving asserts from {}", assets_path);
+    let assets_service = ServeDir::new(assets_path);
+    app = app.fallback_service(assets_service);
 
     log::info!("listening on {}", addr);
     if let Some(key_file_path) = args.key_file_path {
