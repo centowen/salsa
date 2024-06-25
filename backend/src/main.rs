@@ -50,7 +50,7 @@ async fn main() {
 
     let mut app = Router::new()
         .route("/", get(index::get_index))
-        .nest("/observe", observe_routes::routes())
+        .nest("/observe", observe_routes::routes(telescopes.clone()))
         .route("/weather", get(weather::get_weather_info))
         .nest("/bookings", booking_routes::routes(database.clone()))
         .nest("/telescopes", telescope_routes::routes(telescopes.clone()))

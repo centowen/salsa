@@ -1,26 +1,42 @@
 <div class="section light">
-  <h1>Please observe!</h1>
+  <h1> Please observe!</h1>
   <p>
-    <label for="x">Longitude [deg] / Right ascension</label>
-    <input type="text" id="x" name="x">
+    Telescope: {{ telescope_name }}
   </p>
-  <p>
-    <label for="y">Latitude [deg] / Declination</label>
-    <input type="text" id="y" name="y">
-  </p>
+  <h2>Target</h2>
+  <form>
+    <p>
+      <label for="x">Longitude [deg] / Right ascension</label>
+      <input type="text" id="x" name="x">
+    </p>
+    <p>
+      <label for="y">Latitude [deg] / Declination</label>
+      <input type="text" id="y" name="y">
+    </p>
 
-  <p>
-    <select name="coordinate-system">
-      <option value="galactic">Galactic</option>
-      <option value="equatorial"> Equatorial</option>
-    </select>
-  </p>
+    <p>
+      <select name="coordinate-system">
+        <option value="galactic">Galactic</option>
+        <option value="equatorial"> Equatorial</option>
+      </select>
+    </p>
 
+    <p>
+      <label for="track">Track</label>
+      <input type="checkbox" name="track" ref="{track_toggle_input_ref}">
+    </p>
+    <p>
+      <button>Park</button>
+    </p>
+    <p>
+      <button>Go!</button>
+    </p>
+  </form>
+  <h2>State</h2>
   <p>
-    <label for="track">Track</label>
-    <input type="checkbox" name="track" ref="{track_toggle_input_ref}">
+    Azimuth: {{ direction.azimuth }}
   </p>
   <p>
-    <button>Park</button>
-</p>
+    Altitude: {{ direction.altitude }}
+  </p>
 </div>
