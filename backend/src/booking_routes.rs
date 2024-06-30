@@ -34,7 +34,6 @@ where
         .iter()
         .map(|t| t.name.clone())
         .collect();
-    dbg!(&bookings);
     HtmlTemplate(BookingsTemplate {
         bookings,
         telescope_names,
@@ -57,8 +56,6 @@ async fn create_booking<StorageType>(
 where
     StorageType: Storage,
 {
-    dbg!(&booking_form);
-
     let naive_datetime = NaiveDateTime::new(booking_form.start_date, booking_form.start_time);
     let start_time: DateTime<Utc> = Utc.from_utc_datetime(&naive_datetime);
     let end_time = start_time + Duration::hours(booking_form.duration);
