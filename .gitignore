@@ -1,5 +1,4 @@
 target/
-frontend/dist/
 .idea/
 
 /database.json

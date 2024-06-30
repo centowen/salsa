@@ -3,7 +3,6 @@ members = [
     "backend",
     "common",
     "fakesalsa",
-    "frontend",
 ]
 resolver = "2"
 
