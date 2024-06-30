@@ -1,0 +1,55 @@
+<div class="section light">
+  <h1> Please observe!</h1>
+  <p>
+    Telescope: {{ info.id }}
+  </p>
+  <h2>Target</h2>
+  <form>
+    <p>
+      <label for="x">
+        {% if target_mode == "galactic" %}Longitude [deg]{% else %}Right ascension{% endif %}
+      </label>
+      <input type="text" id="x" name="x" value="{{ commanded_x}}">
+    </p>
+    <p>
+      <label for="y">
+        {% if target_mode == "galactic" %}Latitude [deg]{% else %}Declination{% endif %}
+      </label>
+      <input type="text" id="y" name="y" value="{{ commanded_y }}">
+    </p>
+
+    <p>
+      <select name="coordinate-system">
+        <option value="galactic"
+          {% if target_mode == "galactic" %}selected="selected"{% endif %}>
+          Galactic
+        </option>
+        <option value="equatorial"
+          {% if target_mode == "equatorial" %}selected="selected"{% endif %}>
+          Equatorial
+        </option>
+      </select>
+    </p>
+
+    <p>
+      <label for="track">Track</label>
+      <input type="checkbox" name="track" {% if status == "Tracking" %}checked{% endif %}>
+    </p>
+    <p>
+      <button>Go!</button>
+    </p>
+    <p>
+      <button>Park</button>
+    </p>
+  </form>
+  <h2>State</h2>
+  <p>
+    Status: {{ status }}
+  </p>
+  <p>
+    Azimuth: {{ direction.azimuth }}
+  </p>
+  <p>
+    Altitude: {{ direction.altitude }}
+  </p>
+</div>

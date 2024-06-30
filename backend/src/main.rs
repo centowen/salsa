@@ -11,6 +11,7 @@ mod booking_routes;
 mod database;
 mod fake_telescope;
 mod index;
+mod observe_routes;
 mod salsa_telescope;
 mod telescope;
 mod telescope_api_routes;
@@ -49,6 +50,7 @@ async fn main() {
 
     let mut app = Router::new()
         .route("/", get(index::get_index))
+        .nest("/observe", observe_routes::routes(telescopes.clone()))
         .route("/weather", get(weather::get_weather_info))
         .nest("/bookings", booking_routes::routes(database.clone()))
         .nest("/telescopes", telescope_routes::routes(telescopes.clone()))
