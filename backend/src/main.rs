@@ -6,8 +6,7 @@ use std::net::SocketAddr;
 use telescope::create_telescope_collection;
 use tower_http::services::ServeDir;
 
-mod booking_api_routes;
-mod booking_routes;
+mod bookings;
 mod coords;
 mod database;
 mod fake_telescope;
@@ -51,12 +50,12 @@ async fn main() {
     let mut app = Router::new()
         .route("/", get(index::get_index))
         .route("/weather", get(weather::get_weather_info))
-        .nest("/bookings", booking_routes::routes(database.clone()))
+        .nest("/bookings", bookings::routes::routes(database.clone()))
         .nest("/telescopes", telescope_routes::routes(telescopes.clone()))
         .nest("/api/telescopes", telescope_api_routes::routes(telescopes))
         .nest(
             "/api/bookings",
-            booking_api_routes::routes(database.clone()),
+            bookings::api_routes::routes(database.clone()),
         );
 
     let assets_path = "assets";

@@ -1,10 +1,10 @@
+use crate::bookings::Booking;
 use crate::database::{DataBase, Storage};
 use crate::template::HtmlTemplate;
 use askama::Template;
 use axum::Form;
 use axum::{extract::State, response::IntoResponse, routing::get, Router};
 use chrono::{DateTime, Duration, NaiveDate, NaiveDateTime, NaiveTime, TimeZone, Utc};
-use common::Booking;
 use serde::Deserialize;
 
 pub fn routes(database: DataBase<impl Storage + 'static>) -> Router {
@@ -133,7 +133,7 @@ where
 //         body::Body,
 //         http::{self, Request, StatusCode},
 //     };
-//     use common::Booking;
+//     use bookings::Booking;
 //     use tower::ServiceExt;
 
 //     #[tokio::test]
