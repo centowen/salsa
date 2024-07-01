@@ -8,6 +8,7 @@ use tower_http::services::ServeDir;
 
 mod booking_api_routes;
 mod booking_routes;
+mod coords;
 mod database;
 mod fake_telescope;
 mod index;

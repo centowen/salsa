@@ -3,8 +3,6 @@ use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 use std::time::Duration;
 
-pub mod coords;
-
 #[derive(Serialize, Deserialize, Debug)]
 pub struct WeatherInfo {
     pub temperature: f64,

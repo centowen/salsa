@@ -1,3 +1,4 @@
+use crate::coords::{horizontal_from_equatorial, horizontal_from_galactic};
 use crate::telescope::Telescope;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
@@ -222,11 +223,9 @@ fn calculate_target_horizontal(
 ) -> Direction {
     match target {
         TelescopeTarget::Equatorial { ra, dec } => {
-            common::coords::horizontal_from_equatorial(location, when, ra, dec)
+            horizontal_from_equatorial(location, when, ra, dec)
         }
-        TelescopeTarget::Galactic { l, b } => {
-            common::coords::horizontal_from_galactic(location, when, l, b)
-        }
+        TelescopeTarget::Galactic { l, b } => horizontal_from_galactic(location, when, l, b),
         TelescopeTarget::Stopped => current_horizontal,
         TelescopeTarget::Parked => FAKE_TELESCOPE_PARKING_HORIZONTAL,
     }

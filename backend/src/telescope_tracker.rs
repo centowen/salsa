@@ -1,6 +1,6 @@
+use crate::coords::{horizontal_from_equatorial, horizontal_from_galactic};
 use crate::telescope_controller::{TelescopeCommand, TelescopeController, TelescopeResponse};
 use chrono::{DateTime, Utc};
-use common::coords::{horizontal_from_equatorial, horizontal_from_galactic};
 use common::{Direction, Location, TelescopeError, TelescopeStatus, TelescopeTarget};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
