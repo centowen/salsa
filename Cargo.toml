@@ -1,7 +1,6 @@
 [workspace]
 members = [
     "backend",
-    "common",
     "fakesalsa",
 ]
 resolver = "2"

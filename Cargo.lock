@@ -294,7 +294,6 @@ dependencies = [
  "axum-server",
  "chrono",
  "clap 4.5.7",
- "common",
  "env_logger 0.10.2",
  "hex-literal 0.4.1",
  "hyper",
@@ -539,14 +538,6 @@ name = "colorchoice"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b6a852b24ab71dffc585bcb46eaf7959d175cb865a7152e35b348d1b2960422"
-
-[[package]]
-name = "common"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "serde",
-]
 
 [[package]]
 name = "core-foundation-sys"
