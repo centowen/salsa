@@ -1,7 +1,8 @@
 use crate::coords::{horizontal_from_equatorial, horizontal_from_galactic};
+use crate::coords::{Direction, Location};
 use crate::telescope_controller::{TelescopeCommand, TelescopeController, TelescopeResponse};
+use crate::telescopes::{TelescopeError, TelescopeStatus, TelescopeTarget};
 use chrono::{DateTime, Utc};
-use common::{Direction, Location, TelescopeError, TelescopeStatus, TelescopeTarget};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::time::{sleep_until, Instant};

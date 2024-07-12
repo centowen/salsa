@@ -1,4 +1,8 @@
+use crate::coords::Direction;
 use crate::telescope::{Telescope, TelescopeCollection};
+use crate::telescopes::{
+    ReceiverConfiguration, ReceiverError, TelescopeError, TelescopeInfo, TelescopeTarget,
+};
 use axum::{
     extract::{Json, Path, State},
     http::StatusCode,
@@ -6,8 +10,6 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use common::{Direction, TelescopeError, TelescopeInfo, TelescopeTarget};
-use common::{ReceiverConfiguration, ReceiverError};
 
 pub fn routes(telescopes: TelescopeCollection) -> Router {
     let telescope_routes = Router::new()

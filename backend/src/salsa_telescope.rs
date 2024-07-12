@@ -1,11 +1,12 @@
+use crate::coords::Direction;
 use crate::telescope::Telescope;
 use crate::telescope_tracker::TelescopeTracker;
-use async_trait::async_trait;
-use chrono::Utc;
-use common::{
-    Direction, Measurement, ObservedSpectra, ReceiverConfiguration, ReceiverError, TelescopeError,
+use crate::telescopes::{
+    Measurement, ObservedSpectra, ReceiverConfiguration, ReceiverError, TelescopeError,
     TelescopeInfo, TelescopeTarget,
 };
+use async_trait::async_trait;
+use chrono::Utc;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;

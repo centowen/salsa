@@ -1,7 +1,9 @@
-use async_trait::async_trait;
-use common::{
-    Direction, ReceiverConfiguration, ReceiverError, TelescopeError, TelescopeInfo, TelescopeTarget,
+use crate::coords::Direction;
+use crate::telescopes::{
+    TelescopeDefinition, TelescopeType, ReceiverConfiguration, ReceiverError,
+    TelescopeError, TelescopeInfo, TelescopeTarget,
 };
+use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
@@ -49,17 +51,17 @@ fn start_telescope_service(telescope: Arc<Mutex<dyn Telescope>>) -> tokio::task:
     })
 }
 
-fn create_telescope(telescope_definition: common::TelescopeDefinition) -> TelescopeContainer {
+fn create_telescope(telescope_definition: TelescopeDefinition) -> TelescopeContainer {
     log::info!("Creating telescope {}", telescope_definition.name);
     let telescope: Arc<Mutex<dyn Telescope>> = match telescope_definition.telescope_type {
-        common::TelescopeType::Salsa { definition } => {
+        TelescopeType::Salsa { definition } => {
             Arc::new(Mutex::new(crate::salsa_telescope::create(
                 telescope_definition.name.clone(),
                 definition.controller_address.clone(),
                 definition.receiver_address.clone(),
             )))
         }
-        common::TelescopeType::Fake { .. } => Arc::new(Mutex::new(crate::fake_telescope::create(
+        TelescopeType::Fake { .. } => Arc::new(Mutex::new(crate::fake_telescope::create(
             telescope_definition.name.clone(),
         ))),
     };

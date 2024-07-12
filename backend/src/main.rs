@@ -17,6 +17,7 @@ mod telescope_api_routes;
 mod telescope_controller;
 mod telescope_routes;
 mod telescope_tracker;
+mod telescopes;
 mod template;
 mod weather;
 

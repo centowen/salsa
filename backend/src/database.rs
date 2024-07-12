@@ -108,7 +108,7 @@ pub trait Key {
 }
 
 use crate::bookings::Booking;
-use common::TelescopeDefinition;
+use crate::telescopes::TelescopeDefinition;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct DataModel {

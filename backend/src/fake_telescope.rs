@@ -1,11 +1,12 @@
 use crate::coords::{horizontal_from_equatorial, horizontal_from_galactic};
+use crate::coords::{Direction, Location};
 use crate::telescope::Telescope;
+use crate::telescopes::{
+    ObservedSpectra, ReceiverConfiguration, ReceiverError, TelescopeError, TelescopeInfo,
+    TelescopeStatus, TelescopeTarget,
+};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use common::{
-    Direction, Location, ObservedSpectra, ReceiverConfiguration, ReceiverError, TelescopeError,
-    TelescopeInfo, TelescopeStatus, TelescopeTarget,
-};
 use rand::Rng;
 use rand_distr::StandardNormal;
 use std::f64::consts::PI;
