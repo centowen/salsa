@@ -1,14 +1,8 @@
+use crate::coords::{Direction, Location};
 use chrono::{offset::Utc, DateTime};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 use std::time::Duration;
-
-pub mod coords;
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct WeatherInfo {
-    pub temperature: f64,
-}
 
 #[derive(Serialize, Deserialize, PartialEq, Debug, Copy, Clone)]
 pub enum TelescopeTarget {
@@ -22,12 +16,6 @@ pub enum TelescopeTarget {
     },
     Parked,
     Stopped,
-}
-
-#[derive(Serialize, Deserialize, PartialEq, Debug, Copy, Clone)]
-pub struct Direction {
-    pub azimuth: f64,
-    pub altitude: f64,
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Debug, Copy, Clone)]
@@ -120,39 +108,9 @@ impl From<std::io::Error> for TelescopeError {
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Debug, Copy, Clone)]
-pub struct Location {
-    pub longitude: f64,
-    pub latitude: f64,
-}
-
-#[derive(Serialize, Deserialize, PartialEq, Debug, Copy, Clone)]
 pub struct ReceiverConfiguration {
     pub integrate: bool,
 }
-
-#[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
-pub struct Booking {
-    pub start_time: DateTime<Utc>,
-    pub end_time: DateTime<Utc>,
-    pub telescope_name: String,
-    pub user_name: String,
-}
-
-impl Booking {
-    pub fn overlaps(&self, other: &Booking) -> bool {
-        self.end_time >= other.start_time && self.start_time <= other.end_time
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
-pub enum AddBookingError {
-    ServiceUnavailable,
-    Conflict,
-    // NotFuture - booking is entirely(?) in the past
-    // NonPositiveDuration - booking ends before it starts
-}
-
-pub type AddBookingResult = Result<u64, AddBookingError>;
 
 #[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
 pub struct Measurement {

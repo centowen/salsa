@@ -102,12 +102,8 @@ pub async fn create_database_from_directory(
     })
 }
 
-pub trait Key {
-    type Type;
-    fn key() -> &'static str;
-}
-
-use common::{Booking, TelescopeDefinition};
+use crate::bookings::Booking;
+use crate::telescopes::TelescopeDefinition;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct DataModel {

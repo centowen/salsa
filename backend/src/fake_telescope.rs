@@ -1,10 +1,12 @@
+use crate::coords::{horizontal_from_equatorial, horizontal_from_galactic};
+use crate::coords::{Direction, Location};
 use crate::telescope::Telescope;
+use crate::telescopes::{
+    ObservedSpectra, ReceiverConfiguration, ReceiverError, TelescopeError, TelescopeInfo,
+    TelescopeStatus, TelescopeTarget,
+};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use common::{
-    Direction, Location, ObservedSpectra, ReceiverConfiguration, ReceiverError, TelescopeError,
-    TelescopeInfo, TelescopeStatus, TelescopeTarget,
-};
 use rand::Rng;
 use rand_distr::StandardNormal;
 use std::f64::consts::PI;
@@ -222,11 +224,9 @@ fn calculate_target_horizontal(
 ) -> Direction {
     match target {
         TelescopeTarget::Equatorial { ra, dec } => {
-            common::coords::horizontal_from_equatorial(location, when, ra, dec)
+            horizontal_from_equatorial(location, when, ra, dec)
         }
-        TelescopeTarget::Galactic { l, b } => {
-            common::coords::horizontal_from_galactic(location, when, l, b)
-        }
+        TelescopeTarget::Galactic { l, b } => horizontal_from_galactic(location, when, l, b),
         TelescopeTarget::Stopped => current_horizontal,
         TelescopeTarget::Parked => FAKE_TELESCOPE_PARKING_HORIZONTAL,
     }

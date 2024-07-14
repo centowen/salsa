@@ -1,5 +1,5 @@
-use crate::{Direction, Location};
-use chrono::prelude::*;
+use chrono::{DateTime, TimeZone, Utc};
+use serde::{Deserialize, Serialize};
 use std::f64::consts::PI;
 
 // Obliquity of the ecliptic, accurate to 1 arcmin per century from J2000
@@ -11,6 +11,18 @@ const ARA: f64 = 4.71238898038;
 const ADE: f64 = 0.52359877559;
 const R_EARTH: f64 = 6378.135; // Earth radius in km
 const FULL_CIRCLE: f64 = 2.0 * PI;
+
+#[derive(Serialize, Deserialize, PartialEq, Debug, Copy, Clone)]
+pub struct Location {
+    pub longitude: f64,
+    pub latitude: f64,
+}
+
+#[derive(Serialize, Deserialize, PartialEq, Debug, Copy, Clone)]
+pub struct Direction {
+    pub azimuth: f64,
+    pub altitude: f64,
+}
 
 // Function to calculate satellite position for observe at given time
 // from https://celestrak.org/columns/v02n02/

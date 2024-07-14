@@ -1,3 +1,4 @@
+use crate::bookings::{AddBookingError, AddBookingResult, Booking};
 use crate::database::{DataBase, DataBaseError, Storage};
 use axum::{
     extract::{Json, State},
@@ -6,7 +7,6 @@ use axum::{
     routing::get,
     Router,
 };
-use common::{AddBookingError, AddBookingResult, Booking};
 
 impl From<DataBaseError> for AddBookingError {
     fn from(_source: DataBaseError) -> Self {
@@ -72,11 +72,11 @@ mod test {
     use crate::database::create_in_memory_database;
 
     use super::*;
+    use crate::bookings::Booking;
     use axum::{
         body::Body,
         http::{self, Request, StatusCode},
     };
-    use common::Booking;
     use tower::ServiceExt;
 
     #[tokio::test]

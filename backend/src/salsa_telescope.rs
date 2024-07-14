@@ -1,11 +1,12 @@
+use crate::coords::Direction;
 use crate::telescope::Telescope;
 use crate::telescope_tracker::TelescopeTracker;
-use async_trait::async_trait;
-use chrono::Utc;
-use common::{
-    Direction, Measurement, ObservedSpectra, ReceiverConfiguration, ReceiverError, TelescopeError,
+use crate::telescopes::{
+    Measurement, ObservedSpectra, ReceiverConfiguration, ReceiverError, TelescopeError,
     TelescopeInfo, TelescopeTarget,
 };
+use async_trait::async_trait;
+use chrono::Utc;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
@@ -356,11 +357,9 @@ impl Telescope for SalsaTelescope {
 
 #[cfg(test)]
 mod test {
-    use chrono::TimeZone;
     use hex_literal::hex;
 
     use super::*;
-    use std::f64::consts::PI;
 
     #[test]
     fn test_rot2prog_bytes_to_angle_documented() {
