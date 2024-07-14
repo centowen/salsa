@@ -102,11 +102,6 @@ pub async fn create_database_from_directory(
     })
 }
 
-pub trait Key {
-    type Type;
-    fn key() -> &'static str;
-}
-
 use crate::bookings::Booking;
 use crate::telescopes::TelescopeDefinition;
 

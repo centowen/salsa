@@ -72,11 +72,11 @@ mod test {
     use crate::database::create_in_memory_database;
 
     use super::*;
+    use crate::bookings::Booking;
     use axum::{
         body::Body,
         http::{self, Request, StatusCode},
     };
-    use bookings::Booking;
     use tower::ServiceExt;
 
     #[tokio::test]

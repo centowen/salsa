@@ -357,11 +357,9 @@ impl Telescope for SalsaTelescope {
 
 #[cfg(test)]
 mod test {
-    use chrono::TimeZone;
     use hex_literal::hex;
 
     use super::*;
-    use std::f64::consts::PI;
 
     #[test]
     fn test_rot2prog_bytes_to_angle_documented() {

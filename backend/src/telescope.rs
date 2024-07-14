@@ -1,7 +1,7 @@
 use crate::coords::Direction;
 use crate::telescopes::{
-    TelescopeDefinition, TelescopeType, ReceiverConfiguration, ReceiverError,
-    TelescopeError, TelescopeInfo, TelescopeTarget,
+    ReceiverConfiguration, ReceiverError, TelescopeDefinition, TelescopeError, TelescopeInfo,
+    TelescopeTarget, TelescopeType,
 };
 use async_trait::async_trait;
 use std::collections::HashMap;
