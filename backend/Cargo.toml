@@ -12,7 +12,7 @@ axum = { version = "0.6.18", features = ["json", "headers"] }#astro = "2.0.0"
 chrono = { version = "0.4.2", features = ["serde"] }
 clap = {version = "4.1.6", features = ["derive", "env"] }
 env_logger = "0.10.0"
-hex-literal = { version="0.4.1" }
+hex-literal = { version="0.3.4" }
 log = "0.4.17"
 rand = "0.8.5"
 rand_distr = "0.4.3"

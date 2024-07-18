@@ -1,7 +1,0 @@
-[package]
-name = "fakesalsa"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-hex-literal = { version="0.3.4" }
