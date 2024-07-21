@@ -7,4 +7,4 @@ fi
 
 RUST_BACKTRACE=1 \
     RUST_LOG=Info \
-    cargo run --package backend --bin backend
+    cargo run --bin backend
