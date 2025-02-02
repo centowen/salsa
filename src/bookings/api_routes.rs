@@ -1,6 +1,7 @@
 use crate::bookings::{AddBookingError, AddBookingResult, Booking};
 use crate::database::{DataBase, DataBaseError, Storage};
 use axum::{
+    body::to_bytes,
     extract::{Json, State},
     http::StatusCode,
     response::IntoResponse,
@@ -110,7 +111,7 @@ mod test {
 
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let bookings: Vec<Booking> = serde_json::from_slice(&body).unwrap();
         assert_eq!(bookings, vec![booking]);
     }
@@ -140,7 +141,7 @@ mod test {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::CREATED);
-        let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let res: AddBookingResult = serde_json::from_slice(&body).unwrap();
         assert_eq!(res, Ok(1)); // 1 because the database is empty before the request
 
