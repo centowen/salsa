@@ -14,7 +14,7 @@ Start the backend
 ```
 or
 ```shell
-cargo run --package backend
+cargo run --bin backend
 ```
 
 ## Running with https

@@ -19,7 +19,7 @@ pub fn routes(telescopes: TelescopeCollection) -> Router {
         .route("/receiver", post(set_receiver_configuration));
     let router = Router::new()
         .route("/", get(get_telescopes))
-        .nest("/:telescope_id", telescope_routes)
+        .nest("/{telescope_id}", telescope_routes)
         .with_state(telescopes);
     router
 }
