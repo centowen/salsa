@@ -13,7 +13,7 @@ use tokio_util::sync::CancellationToken;
 
 use std::time::Duration;
 
-use rustfft::{num_complex::Complex, FftPlanner};
+use rustfft::{FftPlanner, num_complex::Complex};
 use uhd::{self, StreamCommand, StreamCommandType, StreamTime, TuneRequest, Usrp};
 
 pub struct ActiveIntegration {

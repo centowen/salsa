@@ -1,5 +1,5 @@
-use crate::coords::{horizontal_from_equatorial, horizontal_from_galactic};
 use crate::coords::{Direction, Location};
+use crate::coords::{horizontal_from_equatorial, horizontal_from_galactic};
 use crate::telescope::Telescope;
 use crate::telescopes::{
     ObservedSpectra, ReceiverConfiguration, ReceiverError, TelescopeError, TelescopeInfo,
