@@ -126,7 +126,7 @@ fn equatorial_from_galactic(l: f64, b: f64) -> (f64, f64) {
     let ra_ngp: f64 = 192.85948_f64.to_radians(); // R.A. North Galactic Pole
     let dec_ngp: f64 = 27.12825_f64.to_radians(); // Declination North Galactic Pole
     let l_ncp: f64 = 122.93192_f64.to_radians(); // Galactic Longitude North Celestial Pole
-                                                 // Declination is straight forward from link above
+    // Declination is straight forward from link above
     let dec = (dec_ngp.sin() * b.sin() + dec_ngp.cos() * b.cos() * (l_ncp - l).cos()).asin();
     // To get one equation for R.A., divide the two equations on link above we get
     // tan(ra-ra_ngp) on left side and long thing on right sida. Use atan2 to recover

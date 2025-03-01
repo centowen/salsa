@@ -1,5 +1,5 @@
 use crate::coords::{Direction, Location};
-use chrono::{offset::Utc, DateTime};
+use chrono::{DateTime, offset::Utc};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 use std::time::Duration;

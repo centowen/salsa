@@ -1,11 +1,11 @@
-use crate::coords::{horizontal_from_equatorial, horizontal_from_galactic};
 use crate::coords::{Direction, Location};
+use crate::coords::{horizontal_from_equatorial, horizontal_from_galactic};
 use crate::telescope_controller::{TelescopeCommand, TelescopeController, TelescopeResponse};
 use crate::telescopes::{TelescopeError, TelescopeStatus, TelescopeTarget};
 use chrono::{DateTime, Utc};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use tokio::time::{sleep_until, Instant};
+use tokio::time::{Instant, sleep_until};
 
 pub const LOWEST_ALLOWED_ALTITUDE: f64 = 5.0f64 / 180.0f64 * std::f64::consts::PI;
 

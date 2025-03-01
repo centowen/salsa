@@ -3,7 +3,7 @@ use crate::database::{DataBase, Storage};
 use crate::template::HtmlTemplate;
 use askama::Template;
 use axum::Form;
-use axum::{extract::State, response::IntoResponse, routing::get, Router};
+use axum::{Router, extract::State, response::IntoResponse, routing::get};
 use chrono::{DateTime, Duration, NaiveDate, NaiveDateTime, NaiveTime, TimeZone, Utc};
 use serde::Deserialize;
 

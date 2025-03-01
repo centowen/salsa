@@ -1,5 +1,5 @@
-use rand::thread_rng;
 use rand::Rng;
+use rand::thread_rng;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug)]

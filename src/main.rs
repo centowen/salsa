@@ -1,4 +1,4 @@
-use axum::{routing::get, Router};
+use axum::{Router, routing::get};
 use axum_server::tls_rustls::RustlsConfig;
 use clap::Parser;
 use database::create_database_from_directory;

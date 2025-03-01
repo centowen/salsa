@@ -4,11 +4,11 @@ use crate::telescopes::{
     ReceiverConfiguration, ReceiverError, TelescopeError, TelescopeInfo, TelescopeTarget,
 };
 use axum::{
+    Router,
     extract::{Json, Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::{get, post},
-    Router,
 };
 
 pub fn routes(telescopes: TelescopeCollection) -> Router {

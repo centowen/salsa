@@ -1,12 +1,12 @@
 use crate::bookings::{AddBookingError, AddBookingResult, Booking};
 use crate::database::{DataBase, DataBaseError, Storage};
 use axum::{
+    Router,
     body::to_bytes,
     extract::{Json, State},
     http::StatusCode,
     response::IntoResponse,
     routing::get,
-    Router,
 };
 
 impl From<DataBaseError> for AddBookingError {
