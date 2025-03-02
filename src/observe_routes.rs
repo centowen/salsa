@@ -2,7 +2,6 @@ use crate::coords::Direction;
 use crate::index::render_main;
 use crate::telescope::TelescopeCollection;
 use crate::telescopes::{TelescopeError, TelescopeInfo, TelescopeStatus, TelescopeTarget};
-use crate::template::HtmlTemplate;
 use askama::Template;
 use axum::extract::State;
 use axum::http::{HeaderMap, StatusCode};

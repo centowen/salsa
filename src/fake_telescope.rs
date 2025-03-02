@@ -197,7 +197,7 @@ impl Telescope for FakeTelescope {
 }
 
 fn create_fake_spectra(integration_time: Duration) -> ObservedSpectra {
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
 
     let frequencies: Vec<f64> = (0..FAKE_TELESCOPE_CHANNELS)
         .map(|channel| channel as f64 * FAKE_TELESCOPE_CHANNEL_WIDTH + FAKE_TELESCOPE_FIRST_CHANNEL)

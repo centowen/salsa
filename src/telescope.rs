@@ -32,7 +32,6 @@ pub trait Telescope: Send + Sync {
 
 pub struct TelescopeContainer {
     pub telescope: Arc<Mutex<dyn Telescope>>,
-    pub service: Option<tokio::task::JoinHandle<()>>,
 }
 
 pub type TelescopeCollection = Arc<RwLock<HashMap<String, TelescopeContainer>>>;
@@ -66,13 +65,15 @@ fn create_telescope(telescope_definition: TelescopeDefinition) -> TelescopeConta
         ))),
     };
 
-    let service: Option<_> = if telescope_definition.enabled {
+    // TODO: The join handle is dropped here (and the service isn't really able to be stopped
+    // either). We should keep track of the telescope service and have a method to shut it down.
+    let _service: Option<_> = if telescope_definition.enabled {
         Some(start_telescope_service(telescope.clone()))
     } else {
         None
     };
 
-    TelescopeContainer { telescope, service }
+    TelescopeContainer { telescope }
 }
 
 pub async fn create_telescope_collection<T>(

@@ -128,6 +128,8 @@ fn rot2prog_bytes_to_angle(bytes: &[u8]) -> f64 {
     (rot2prog_bytes_to_int(bytes) as f64 / 100.0 - 360.0).to_radians()
 }
 
+// Responses are documented as ascii encoded numbers, but the telescope seems to return the
+// bytes directly.
 fn rot2prog_angle_to_bytes(angle: f64) -> [u8; 5] {
     let mut bytes = [0; 5];
     let angle = ((angle.to_degrees() + 360.0) * 100.0).round();
@@ -203,18 +205,5 @@ mod test {
     #[test]
     fn test_rot2prog_bytes_to_angle() {
         assert!((rot2prog_bytes_to_angle(&hex!("0306000000")) - 0.0).abs() < 0.01,);
-    }
-
-    // Responses are documented as ascii encoded numbers, but the telescope seems to return the
-    // bytes directly.
-    fn rot2prog_response_angle_to_bytes(angle: f64) -> [u8; 5] {
-        let mut bytes = [0; 5];
-        let angle = ((angle.to_degrees() + 360.0) * 100.0).round();
-        bytes[0] = (angle / 10000.0) as u8;
-        bytes[1] = ((angle % 10000.0) / 1000.0) as u8;
-        bytes[2] = ((angle % 1000.0) / 100.0) as u8;
-        bytes[3] = ((angle % 100.0) / 10.0) as u8;
-        bytes[4] = (angle % 10.0) as u8;
-        bytes
     }
 }
