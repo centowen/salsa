@@ -1,11 +1,12 @@
 use crate::coords::Direction;
+use crate::index::render_main;
 use crate::telescope::TelescopeCollection;
 use crate::telescopes::{TelescopeError, TelescopeInfo, TelescopeStatus, TelescopeTarget};
 use crate::template::HtmlTemplate;
 use askama::Template;
 use axum::extract::State;
-use axum::http::StatusCode;
-use axum::response::{IntoResponse, Response};
+use axum::http::{HeaderMap, StatusCode};
+use axum::response::{Html, IntoResponse, Response};
 use axum::{Router, routing::get};
 
 pub fn routes(telescopes: TelescopeCollection) -> Router {
@@ -40,6 +41,7 @@ struct ObserveTemplate {
 }
 
 async fn get_observe(
+    headers: HeaderMap,
     State(telescopes): State<TelescopeCollection>,
 ) -> Result<impl IntoResponse, TelescopeNotFound> {
     let telescopes = telescopes.read().await;
@@ -61,7 +63,8 @@ async fn get_observe(
             info.current_horizontal.altitude,
         ),
     };
-    Ok(HtmlTemplate(ObserveTemplate {
+
+    let content = ObserveTemplate {
         info: info.clone(),
         status: match &info.status {
             TelescopeStatus::Idle => "Idle".to_string(),
@@ -72,5 +75,13 @@ async fn get_observe(
         direction: telescope.get_direction().await?,
         commanded_x,
         commanded_y,
-    }))
+    }
+    .render()
+    .expect("Template rendering should always succeed");
+    let content = if headers.get("hx-request").is_some() {
+        content
+    } else {
+        render_main(content)
+    };
+    Ok(Html(content).into_response())
 }
