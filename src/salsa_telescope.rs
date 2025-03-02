@@ -69,7 +69,7 @@ fn measure_switched(
     tint: f64,
     avg_pts: usize,
     srate: f64,
-    spec: &mut Vec<f64>,
+    spec: &mut [f64],
 ) {
     let mut spec_sig: Vec<f64> = vec![];
     measure_single(
@@ -148,8 +148,8 @@ fn measure_single(
         // Seems the pos/neg halves of spectrum are flipped, so reflip them
         // we want lowest frequency in element 0 and then increasing
         for i in 0..fft_pts / 2 {
-            fft_abs[i + fft_pts / 2] = fft_abs[i + fft_pts / 2] + fft_buffer[i].norm();
-            fft_abs[i] = fft_abs[i] + fft_buffer[i + fft_pts / 2].norm();
+            fft_abs[i + fft_pts / 2] += fft_buffer[i].norm();
+            fft_abs[i] += fft_buffer[i + fft_pts / 2].norm();
         }
     }
     // Normalise spectrum by number of stackings,
@@ -177,7 +177,7 @@ fn measure_single(
     for i in 0..avg_pts {
         let mut avg = 0.0;
         for j in navg * i..navg * (i + 1) {
-            avg = avg + fft_abs[j];
+            avg += fft_abs[j];
         }
         fft_avg.push(avg / (navg as f64));
     }
@@ -198,7 +198,7 @@ async fn measure(
     address: String,
     measurements: Arc<Mutex<Vec<Measurement>>>,
     cancellation_token: CancellationToken,
-) -> () {
+) {
     // Switched HI example
     let tint: f64 = 1.0; // integration time per cycle, seconds
     let srate: f64 = 2.5e6; // sample rate, Hz
@@ -217,7 +217,7 @@ async fn measure(
     usrp.set_rx_antenna("TX/RX", 0).unwrap();
     usrp.set_rx_dc_offset_enabled(true, 0).unwrap();
 
-    usrp.set_rx_sample_rate(srate as f64, 0).unwrap();
+    usrp.set_rx_sample_rate(srate, 0).unwrap();
 
     {
         let mut measurements = measurements.clone().lock_owned().await;
@@ -240,7 +240,7 @@ async fn measure(
         measure_switched(
             &mut usrp, sfreq, rfreq, fft_pts, tint, avg_pts, srate, &mut spec,
         );
-        n = n + 1.0;
+        n += 1.0;
 
         let mut measurements = measurements.lock().await;
         let measurement = measurements.last_mut().unwrap();

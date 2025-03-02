@@ -36,7 +36,7 @@ impl TelescopeController {
         command: TelescopeCommand,
     ) -> Result<TelescopeResponse, TelescopeError> {
         // FIXME: Handle connection failure.
-        self.stream.write(&command.to_bytes()).unwrap();
+        self.stream.write_all(&command.to_bytes()).unwrap();
         let mut result = vec![0; 128];
         // FIXME: Handle connection failure.
         let response_length = self.stream.read(&mut result).unwrap();
@@ -46,7 +46,7 @@ impl TelescopeController {
 }
 
 impl TelescopeCommand {
-    fn to_bytes(&self) -> Vec<u8> {
+    fn to_bytes(self) -> Vec<u8> {
         match self {
             TelescopeCommand::Stop => hex!("57000000000000000000000F20").into(),
             TelescopeCommand::Restart => hex!("57EFBEADDE000000000000EE20").into(),

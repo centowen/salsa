@@ -17,11 +17,10 @@ pub fn routes(telescopes: TelescopeCollection) -> Router {
         .route("/target", get(get_target).post(set_target))
         .route("/restart", post(restart))
         .route("/receiver", post(set_receiver_configuration));
-    let router = Router::new()
+    Router::new()
         .route("/", get(get_telescopes))
         .nest("/{telescope_id}", telescope_routes)
-        .with_state(telescopes);
-    router
+        .with_state(telescopes)
 }
 
 async fn get_telescopes(State(telescopes): State<TelescopeCollection>) -> Json<Vec<TelescopeInfo>> {
