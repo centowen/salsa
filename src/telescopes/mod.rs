@@ -7,12 +7,12 @@ use std::time::Duration;
 #[derive(Serialize, Deserialize, PartialEq, Debug, Copy, Clone)]
 pub enum TelescopeTarget {
     Equatorial {
-        ra: f64,  // in radians
-        dec: f64, // in radians
+        right_ascension: f64, // in radians
+        declination: f64,     // in radians
     },
     Galactic {
-        l: f64, // in radians
-        b: f64, // in radians
+        longitude: f64, // in radians
+        latitude: f64,  // in radians
     },
     Parked,
     Stopped,

@@ -194,10 +194,14 @@ fn calculate_target_horizontal(
     when: DateTime<Utc>,
 ) -> Option<Direction> {
     match target {
-        TelescopeTarget::Equatorial { ra, dec } => {
-            Some(horizontal_from_equatorial(location, when, ra, dec))
-        }
-        TelescopeTarget::Galactic { l, b } => Some(horizontal_from_galactic(location, when, l, b)),
+        TelescopeTarget::Equatorial {
+            right_ascension: ra,
+            declination: dec,
+        } => Some(horizontal_from_equatorial(location, when, ra, dec)),
+        TelescopeTarget::Galactic {
+            longitude: l,
+            latitude: b,
+        } => Some(horizontal_from_galactic(location, when, l, b)),
         TelescopeTarget::Stopped => None,
         TelescopeTarget::Parked => None,
     }

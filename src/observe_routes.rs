@@ -49,10 +49,13 @@ async fn post_observe(
     let x_rad = target.x.to_radians();
     let y_rad = target.y.to_radians();
     let target = match target.coordinate_system.as_str() {
-        "galactic" => TelescopeTarget::Galactic { l: x_rad, b: y_rad },
+        "galactic" => TelescopeTarget::Galactic {
+            longitude: x_rad,
+            latitude: y_rad,
+        },
         "equatorial" => TelescopeTarget::Equatorial {
-            ra: x_rad,
-            dec: y_rad,
+            right_ascension: x_rad,
+            declination: y_rad,
         },
         _ => return Err(TelescopeNotFound {}), // TODO: Proper errors!
     };
@@ -103,8 +106,14 @@ async fn observe(telescopes: TelescopeCollection) -> Result<String, TelescopeNot
     }
     .to_string();
     let (commanded_x, commanded_y) = match info.current_target {
-        TelescopeTarget::Equatorial { ra, dec } => (ra, dec),
-        TelescopeTarget::Galactic { l, b } => (l, b),
+        TelescopeTarget::Equatorial {
+            right_ascension: ra,
+            declination: dec,
+        } => (ra, dec),
+        TelescopeTarget::Galactic {
+            longitude: l,
+            latitude: b,
+        } => (l, b),
         _ => (
             info.current_horizontal.azimuth,
             info.current_horizontal.altitude,
