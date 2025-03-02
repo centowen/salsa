@@ -1,9 +1,12 @@
 use crate::bookings::Booking;
 use crate::database::{DataBase, Storage};
+use crate::index::render_main;
 use crate::template::HtmlTemplate;
 use askama::Template;
 use axum::Form;
-use axum::{Router, extract::State, response::IntoResponse, routing::get};
+use axum::http::HeaderMap;
+use axum::response::{Html, IntoResponse};
+use axum::{Router, extract::State, routing::get};
 use chrono::{DateTime, Duration, NaiveDate, NaiveDateTime, NaiveTime, TimeZone, Utc};
 use serde::Deserialize;
 
@@ -20,7 +23,10 @@ struct BookingsTemplate {
     telescope_names: Vec<String>,
 }
 
-async fn get_bookings<StorageType>(State(db): State<DataBase<StorageType>>) -> impl IntoResponse
+async fn get_bookings<StorageType>(
+    headers: HeaderMap,
+    State(db): State<DataBase<StorageType>>,
+) -> impl IntoResponse
 where
     StorageType: Storage,
 {
@@ -34,10 +40,18 @@ where
         .iter()
         .map(|t| t.name.clone())
         .collect();
-    HtmlTemplate(BookingsTemplate {
+    let content = BookingsTemplate {
         bookings,
         telescope_names,
-    })
+    }
+    .render()
+    .expect("Template rendering should always succeed");
+    let content = if headers.get("hx-request").is_some() {
+        content
+    } else {
+        render_main(content)
+    };
+    Html(content).into_response()
 }
 
 #[derive(Deserialize, Debug)]
