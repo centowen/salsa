@@ -7,19 +7,19 @@
   <form>
     <p>
       <label for="x">
-        {% if target_mode == "galactic" %}Longitude [deg]{% else %}Right ascension{% endif %}
+        {% if target_mode == "galactic" %}Longitude [deg]{% else %}Right ascension [deg]{% endif %}
       </label>
-      <input type="text" id="x" name="x" value="{{ commanded_x}}">
+      <input type="text" id="x" name="x" value="{{ commanded_x.to_degrees() }}">
     </p>
     <p>
       <label for="y">
-        {% if target_mode == "galactic" %}Latitude [deg]{% else %}Declination{% endif %}
+        {% if target_mode == "galactic" %}Latitude [deg]{% else %}Declination [deg]{% endif %}
       </label>
-      <input type="text" id="y" name="y" value="{{ commanded_y }}">
+      <input type="text" id="y" name="y" value="{{ commanded_y.to_degrees() }}">
     </p>
 
     <p>
-      <select name="coordinate-system">
+      <select name="coordinate_system">
         <option value="galactic"
           {% if target_mode == "galactic" %}selected="selected"{% endif %}>
           Galactic
@@ -36,7 +36,7 @@
       <input type="checkbox" name="track" {% if status == "Tracking" %}checked{% endif %}>
     </p>
     <p>
-      <button>Go!</button>
+      <button hx-post="/observe" hx-target="#page">Go!</button>
     </p>
     <p>
       <button>Park</button>
@@ -47,9 +47,9 @@
     Status: {{ status }}
   </p>
   <p>
-    Azimuth: {{ direction.azimuth }}
+    Azimuth: {{ direction.azimuth.to_degrees() }}
   </p>
   <p>
-    Altitude: {{ direction.altitude }}
+    Altitude: {{ direction.altitude.to_degrees() }}
   </p>
 </div>
