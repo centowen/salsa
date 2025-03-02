@@ -81,7 +81,7 @@ impl TelescopeTracker {
     pub fn direction(&self) -> Result<Direction, TelescopeError> {
         match self.state.lock().unwrap().current_direction {
             Some(current_direction) => Ok(current_direction),
-            None => return Err(TelescopeError::TelescopeNotConnected),
+            None => Err(TelescopeError::TelescopeNotConnected),
         }
     }
 

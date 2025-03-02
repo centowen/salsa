@@ -6,8 +6,8 @@ use std::process;
 fn handle(request: &[u8]) -> [u8; 12] {
     if request
         == hex!("57 00 00 00"
-                       "00 00 00 00"
-                       "00 00 00 6F")
+                "00 00 00 00"
+                "00 00 00 6F")
     {
         println!("Got direction request");
         // ACK
@@ -16,8 +16,8 @@ fn handle(request: &[u8]) -> [u8; 12] {
              "00 00 00 20")
     } else if request
         == hex!("57 00 00 00"
-                             "00 00 00 00"
-                             "00 00 00 0F")
+                "00 00 00 00"
+                "00 00 00 0F")
     {
         println!("Got stop request");
         // ACK
@@ -45,7 +45,7 @@ fn controller_connection(mut stream: TcpStream) {
                 println!("Client sent: {:02X?}", command_buffer);
                 let response = handle(&command_buffer[0..12]);
                 // FIXME: Error handling
-                stream.write(&response).unwrap();
+                stream.write_all(&response).unwrap();
             }
             Ok(n) => {
                 println!(
