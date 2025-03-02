@@ -2,7 +2,6 @@ use crate::bookings::{AddBookingError, AddBookingResult, Booking};
 use crate::database::{DataBase, DataBaseError, Storage};
 use axum::{
     Router,
-    body::to_bytes,
     extract::{Json, State},
     http::StatusCode,
     response::IntoResponse,
@@ -75,7 +74,7 @@ mod test {
     use super::*;
     use crate::bookings::Booking;
     use axum::{
-        body::Body,
+        body::{Body, to_bytes},
         http::{self, Request, StatusCode},
     };
     use tower::ServiceExt;

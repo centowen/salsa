@@ -28,6 +28,7 @@ pub struct Direction {
 // from https://celestrak.org/columns/v02n02/
 // satellite ECI xs,ys,zs in km
 // observer lat,long in radians, alt in km
+#[allow(dead_code)] // TODO: Remove when used.
 pub fn horizontal_from_sat_eci(
     xs: f64,
     ys: f64,
@@ -191,11 +192,13 @@ fn equatorial_from_sun(when: DateTime<Utc>) -> (f64, f64) {
     (ra, dec)
 }
 
+#[allow(dead_code)] // TODO: Remove when used.
 pub fn horizontal_from_sun(location: Location, when: DateTime<Utc>) -> Direction {
     let (ra, dec) = equatorial_from_sun(when);
     horizontal_from_equatorial(location, when, ra, dec)
 }
 
+#[allow(dead_code)] // TODO: Remove when used.
 pub fn vlsrcorr_from_galactic(l: f64, b: f64, when: DateTime<Utc>) -> f64 {
     // From http://web.mit.edu/8.13/www/srt_software/vlsr.pdf
 

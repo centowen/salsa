@@ -1,6 +1,5 @@
 use std::fs::read_to_string;
 
-use crate::template::HtmlTemplate;
 use askama::Template;
 use axum::response::{Html, IntoResponse, Response};
 
