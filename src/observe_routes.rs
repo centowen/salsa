@@ -1,7 +1,5 @@
-use std::sync::Arc;
-
 use crate::index::render_main;
-use crate::telescope::{Telescope, TelescopeCollectionHandle};
+use crate::telescope::{TelescopeCollectionHandle, TelescopeHandle};
 use crate::telescope_routes::state;
 use crate::telescopes::{TelescopeError, TelescopeInfo, TelescopeStatus, TelescopeTarget};
 use askama::Template;
@@ -15,7 +13,6 @@ use axum::{
     routing::{get, post},
 };
 use serde::Deserialize;
-use tokio::sync::Mutex;
 
 pub fn routes(telescopes: TelescopeCollectionHandle) -> Router {
     Router::new()
@@ -95,16 +92,12 @@ async fn post_observe(
         }
     };
 
-    let telescope = telescopes
+    let mut telescope = telescopes
         .get("fake")
         .await
         .ok_or(ObserveError::TelescopeNotFound("fake".to_string()))?;
-    {
-        let telescope = telescope.telescope.clone();
-        let mut telescope = telescope.lock_owned().await;
-        telescope.set_target(target).await?;
-    }
-    let content = observe(telescope.telescope.clone()).await?;
+    telescope.set_target(target).await?;
+    let content = observe(telescope.clone()).await?;
     Ok(Html(content))
 }
 
@@ -116,7 +109,7 @@ async fn get_observe(
         .get("fake")
         .await
         .ok_or(ObserveError::TelescopeNotFound("fake".to_string()))?;
-    let content = observe(telescope.telescope.clone()).await?;
+    let content = observe(telescope.clone()).await?;
     let content = if headers.get("hx-request").is_some() {
         content
     } else {
@@ -136,11 +129,10 @@ struct ObserveTemplate {
     state_html: String,
 }
 
-async fn observe(telescope: Arc<Mutex<dyn Telescope>>) -> Result<String, TelescopeError> {
+async fn observe(telescope: TelescopeHandle) -> Result<String, TelescopeError> {
     // We have to be a little careful about the locking.
     // First extract all data needed for the primary template.
     let (info, status, target_mode, commanded_x, commanded_y) = {
-        let telescope = telescope.clone().lock_owned().await;
         let info = telescope.get_info().await?;
         let target_mode = match &info.current_target {
             TelescopeTarget::Equatorial { .. } => "equatorial",

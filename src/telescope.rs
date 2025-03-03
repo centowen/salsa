@@ -14,7 +14,7 @@ use crate::database::{DataBase, DataBaseError, Storage};
 pub const TELESCOPE_UPDATE_INTERVAL: Duration = Duration::from_secs(1);
 
 #[async_trait]
-pub trait Telescope: Send + Sync {
+pub trait Telescope: Send {
     async fn get_direction(&self) -> Result<Direction, TelescopeError>;
     async fn get_target(&self) -> Result<TelescopeTarget, TelescopeError>;
     async fn set_target(
@@ -30,12 +30,57 @@ pub trait Telescope: Send + Sync {
     async fn restart(&mut self) -> Result<(), TelescopeError>;
 }
 
+// Hide all synchronization for accessing a telescope inside this type only
+// exposing an async api. This is more ergonomic and makes it impossible to
+// create deadlocks in client code.
 #[derive(Clone)]
-pub struct TelescopeContainer {
-    pub telescope: Arc<Mutex<dyn Telescope>>,
+pub struct TelescopeHandle {
+    telescope: Arc<Mutex<dyn Telescope>>,
 }
 
-type TelescopeCollection = Arc<RwLock<HashMap<String, TelescopeContainer>>>;
+// FIXME: Maybe this can be implemented by a macro based on the Telescope trait?
+// It's pure boilerplate.
+impl TelescopeHandle {
+    pub async fn get_direction(&self) -> Result<Direction, TelescopeError> {
+        let guard = self.telescope.lock().await;
+        guard.get_direction().await
+    }
+    pub async fn get_target(&self) -> Result<TelescopeTarget, TelescopeError> {
+        let guard = self.telescope.lock().await;
+        guard.get_target().await
+    }
+    pub async fn set_target(
+        &mut self,
+        target: TelescopeTarget,
+    ) -> Result<TelescopeTarget, TelescopeError> {
+        let mut guard = self.telescope.lock().await;
+        guard.set_target(target).await
+    }
+    pub async fn set_receiver_configuration(
+        &mut self,
+        receiver_configuration: ReceiverConfiguration,
+    ) -> Result<ReceiverConfiguration, ReceiverError> {
+        let mut guard = self.telescope.lock().await;
+        guard
+            .set_receiver_configuration(receiver_configuration)
+            .await
+    }
+    pub async fn get_info(&self) -> Result<TelescopeInfo, TelescopeError> {
+        let guard = self.telescope.lock().await;
+        guard.get_info().await
+    }
+    #[allow(dead_code)] // TODO: Remove when used.
+    pub async fn update(&mut self, delta_time: Duration) -> Result<(), TelescopeError> {
+        let mut guard = self.telescope.lock().await;
+        guard.update(delta_time).await
+    }
+    pub async fn restart(&mut self) -> Result<(), TelescopeError> {
+        let mut guard = self.telescope.lock().await;
+        guard.restart().await
+    }
+}
+
+type TelescopeCollection = Arc<RwLock<HashMap<String, TelescopeHandle>>>;
 
 // Hide all synchronization for handling telescopes inside this type. Exposes an
 // async api without any client-visible locks for managing the collection of
@@ -46,12 +91,12 @@ pub struct TelescopeCollectionHandle {
 }
 
 impl TelescopeCollectionHandle {
-    pub async fn get(&self, id: &str) -> Option<TelescopeContainer> {
+    pub async fn get(&self, id: &str) -> Option<TelescopeHandle> {
         let telescopes_read_lock = self.telescopes.read().await;
         telescopes_read_lock.get(id).cloned()
     }
 
-    pub async fn all(&self) -> Vec<(String, TelescopeContainer)> {
+    pub async fn all(&self) -> Vec<(String, TelescopeHandle)> {
         let telescopes_read_lock = self.telescopes.read().await;
         telescopes_read_lock
             .iter()
@@ -74,7 +119,7 @@ fn start_telescope_service(telescope: Arc<Mutex<dyn Telescope>>) -> tokio::task:
     })
 }
 
-fn create_telescope(telescope_definition: TelescopeDefinition) -> TelescopeContainer {
+fn create_telescope(telescope_definition: TelescopeDefinition) -> TelescopeHandle {
     log::info!("Creating telescope {}", telescope_definition.name);
     let telescope: Arc<Mutex<dyn Telescope>> = match telescope_definition.telescope_type {
         TelescopeType::Salsa { definition } => {
@@ -97,7 +142,7 @@ fn create_telescope(telescope_definition: TelescopeDefinition) -> TelescopeConta
         None
     };
 
-    TelescopeContainer { telescope }
+    TelescopeHandle { telescope }
 }
 
 pub async fn create_telescope_collection<T>(
