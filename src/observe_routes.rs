@@ -1,12 +1,12 @@
-use crate::coords::Direction;
 use crate::index::render_main;
 use crate::telescope::TelescopeCollection;
-use crate::telescopes::{TelescopeError, TelescopeInfo, TelescopeStatus, TelescopeTarget};
+use crate::telescope_routes::{TelescopeNotFound, state};
+use crate::telescopes::{TelescopeInfo, TelescopeStatus, TelescopeTarget};
 use askama::Template;
 use axum::Form;
 use axum::extract::State;
-use axum::http::{HeaderMap, StatusCode};
-use axum::response::{Html, IntoResponse, Response};
+use axum::http::HeaderMap;
+use axum::response::{Html, IntoResponse};
 use axum::{
     Router,
     routing::{get, post},
@@ -19,20 +19,6 @@ pub fn routes(telescopes: TelescopeCollection) -> Router {
         .with_state(telescopes.clone())
         .route("/", post(post_observe))
         .with_state(telescopes.clone())
-}
-
-#[derive(Debug)]
-struct TelescopeNotFound;
-impl IntoResponse for TelescopeNotFound {
-    fn into_response(self) -> Response {
-        (StatusCode::NOT_FOUND, "Telescope not found".to_string()).into_response()
-    }
-}
-// HACK: Hacky hack!
-impl From<TelescopeError> for TelescopeNotFound {
-    fn from(_: TelescopeError) -> Self {
-        TelescopeNotFound {}
-    }
 }
 
 #[derive(Deserialize, Debug)]
@@ -95,10 +81,10 @@ struct ObserveTemplate {
 
 async fn observe(telescopes: TelescopeCollection) -> Result<String, TelescopeNotFound> {
     // We have to be a little careful about the locking.
+    let telescopes_lock = telescopes.read().await;
+    let telescope = telescopes_lock.get("fake").ok_or(TelescopeNotFound)?;
     // First extract all data needed for the primary template.
     let (info, status, target_mode, commanded_x, commanded_y) = {
-        let telescopes_lock = telescopes.read().await;
-        let telescope = telescopes_lock.get("fake").ok_or(TelescopeNotFound)?;
         let telescope = telescope.telescope.clone().lock_owned().await;
         let info = telescope.get_info().await?;
         let target_mode = match &info.current_target {
@@ -130,7 +116,7 @@ async fn observe(telescopes: TelescopeCollection) -> Result<String, TelescopeNot
         (info, status, target_mode, commanded_x, commanded_y)
     };
     // After releasing all locks render the state subtemplate.
-    let state_html = state(telescopes).await?;
+    let state_html = state(telescope.clone()).await?;
     // Finally we can render the full template.
     Ok(ObserveTemplate {
         info,
@@ -139,32 +125,6 @@ async fn observe(telescopes: TelescopeCollection) -> Result<String, TelescopeNot
         commanded_x,
         commanded_y,
         state_html,
-    }
-    .render()
-    .expect("Template rendering should always succeed"))
-}
-
-#[derive(Template)]
-#[template(path = "telescope_state.html")]
-struct TelescopeStateTemplate {
-    info: TelescopeInfo,
-    status: String,
-    direction: Direction,
-}
-
-async fn state(telescopes: TelescopeCollection) -> Result<String, TelescopeNotFound> {
-    let telescopes_lock = telescopes.read().await;
-    let telescope = telescopes_lock.get("fake").ok_or(TelescopeNotFound)?;
-    let telescope = telescope.telescope.clone().lock_owned().await;
-    let info = telescope.get_info().await?;
-    Ok(TelescopeStateTemplate {
-        info: info.clone(),
-        status: match &info.status {
-            TelescopeStatus::Idle => "Idle".to_string(),
-            TelescopeStatus::Slewing => "Slewing".to_string(),
-            TelescopeStatus::Tracking => "Tracking".to_string(),
-        },
-        direction: telescope.get_direction().await?,
     }
     .render()
     .expect("Template rendering should always succeed"))

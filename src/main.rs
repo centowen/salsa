@@ -54,7 +54,7 @@ async fn main() {
         .nest("/observe", observe_routes::routes(telescopes.clone()))
         .route("/weather", get(weather::get_weather_info))
         .nest("/bookings", bookings::routes::routes(database.clone()))
-        .nest("/telescopes", telescope_routes::routes(telescopes.clone()))
+        .nest("/telescope", telescope_routes::routes(telescopes.clone()))
         .nest("/api/telescopes", telescope_api_routes::routes(telescopes))
         .nest(
             "/api/bookings",
