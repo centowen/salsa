@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::index::render_main;
-use crate::telescope::{Telescope, TelescopeCollection};
+use crate::telescope::{Telescope, TelescopeCollectionHandle};
 use crate::telescope_routes::state;
 use crate::telescopes::{TelescopeError, TelescopeInfo, TelescopeStatus, TelescopeTarget};
 use askama::Template;
@@ -17,7 +17,7 @@ use axum::{
 use serde::Deserialize;
 use tokio::sync::Mutex;
 
-pub fn routes(telescopes: TelescopeCollection) -> Router {
+pub fn routes(telescopes: TelescopeCollectionHandle) -> Router {
     Router::new()
         .route("/", get(get_observe))
         .with_state(telescopes.clone())
@@ -25,6 +25,7 @@ pub fn routes(telescopes: TelescopeCollection) -> Router {
         .with_state(telescopes.clone())
 }
 
+// TODO: Support tracking toggle.
 #[derive(Deserialize, Debug)]
 struct Target {
     x: f64, // Degrees
@@ -72,7 +73,7 @@ fn error_response(message: String) -> Response {
 }
 
 async fn post_observe(
-    State(telescopes): State<TelescopeCollection>,
+    State(telescopes): State<TelescopeCollectionHandle>,
     Form(target): Form<Target>,
 ) -> Result<impl IntoResponse, ObserveError> {
     let x_rad = target.x.to_radians();
@@ -94,9 +95,9 @@ async fn post_observe(
         }
     };
 
-    let telescopes_lock = telescopes.read().await;
-    let telescope = telescopes_lock
+    let telescope = telescopes
         .get("fake")
+        .await
         .ok_or(ObserveError::TelescopeNotFound("fake".to_string()))?;
     {
         let telescope = telescope.telescope.clone();
@@ -108,12 +109,12 @@ async fn post_observe(
 }
 
 async fn get_observe(
-    State(telescopes): State<TelescopeCollection>,
+    State(telescopes): State<TelescopeCollectionHandle>,
     headers: HeaderMap,
 ) -> Result<impl IntoResponse, ObserveError> {
-    let telescopes_lock = telescopes.read().await;
-    let telescope = telescopes_lock
+    let telescope = telescopes
         .get("fake")
+        .await
         .ok_or(ObserveError::TelescopeNotFound("fake".to_string()))?;
     let content = observe(telescope.telescope.clone()).await?;
     let content = if headers.get("hx-request").is_some() {

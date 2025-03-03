@@ -35,7 +35,30 @@ pub struct TelescopeContainer {
     pub telescope: Arc<Mutex<dyn Telescope>>,
 }
 
-pub type TelescopeCollection = Arc<RwLock<HashMap<String, TelescopeContainer>>>;
+type TelescopeCollection = Arc<RwLock<HashMap<String, TelescopeContainer>>>;
+
+// Hide all synchronization for handling telescopes inside this type. Exposes an
+// async api without any client-visible locks for managing the collection of
+// telescopes.
+#[derive(Clone)]
+pub struct TelescopeCollectionHandle {
+    telescopes: TelescopeCollection,
+}
+
+impl TelescopeCollectionHandle {
+    pub async fn get(&self, id: &str) -> Option<TelescopeContainer> {
+        let telescopes_read_lock = self.telescopes.read().await;
+        telescopes_read_lock.get(id).cloned()
+    }
+
+    pub async fn all(&self) -> Vec<(String, TelescopeContainer)> {
+        let telescopes_read_lock = self.telescopes.read().await;
+        telescopes_read_lock
+            .iter()
+            .map(|(name, t)| (name.clone(), t.clone()))
+            .collect()
+    }
+}
 
 fn start_telescope_service(telescope: Arc<Mutex<dyn Telescope>>) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
@@ -79,7 +102,7 @@ fn create_telescope(telescope_definition: TelescopeDefinition) -> TelescopeConta
 
 pub async fn create_telescope_collection<T>(
     database: &DataBase<T>,
-) -> Result<TelescopeCollection, DataBaseError>
+) -> Result<TelescopeCollectionHandle, DataBaseError>
 where
     T: Storage,
 {
@@ -95,5 +118,7 @@ where
         })
         .collect();
 
-    Ok(Arc::new(RwLock::new(telescopes)))
+    Ok(TelescopeCollectionHandle {
+        telescopes: Arc::new(RwLock::new(telescopes)),
+    })
 }
