@@ -1,5 +1,7 @@
+use std::sync::Arc;
+
 use crate::coords::Direction;
-use crate::telescope::{Telescope, TelescopeCollection, TelescopeContainer};
+use crate::telescope::{Telescope, TelescopeCollection};
 use crate::telescopes::{ReceiverConfiguration, ReceiverError, TelescopeStatus};
 use crate::telescopes::{TelescopeError, TelescopeInfo, TelescopeTarget};
 use askama::Template;
@@ -11,6 +13,7 @@ use axum::{
     response::{IntoResponse, Response},
     routing::{get, post},
 };
+use tokio::sync::Mutex;
 
 pub fn routes(telescopes: TelescopeCollection) -> Router {
     let telescope_routes = Router::new()
@@ -124,7 +127,7 @@ pub async fn get_state(
     let telescope = telescopes_lock
         .get(&telescope_id)
         .ok_or(TelescopeNotFound)?;
-    Ok(Html(state(telescope.clone()).await?))
+    Ok(Html(state(telescope.telescope.clone()).await?))
 }
 
 #[derive(Template)]
@@ -135,8 +138,8 @@ struct TelescopeStateTemplate {
     direction: Direction,
 }
 
-pub async fn state(telescope: TelescopeContainer) -> Result<String, TelescopeNotFound> {
-    let telescope = telescope.telescope.clone().lock_owned().await;
+pub async fn state(telescope: Arc<Mutex<dyn Telescope>>) -> Result<String, TelescopeError> {
+    let telescope = telescope.lock_owned().await;
     let info = telescope.get_info().await?;
     Ok(TelescopeStateTemplate {
         info: info.clone(),
