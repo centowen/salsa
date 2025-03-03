@@ -30,6 +30,7 @@ pub trait Telescope: Send + Sync {
     async fn restart(&mut self) -> Result<(), TelescopeError>;
 }
 
+#[derive(Clone)]
 pub struct TelescopeContainer {
     pub telescope: Arc<Mutex<dyn Telescope>>,
 }

@@ -42,7 +42,7 @@
       <button>Park</button>
     </p>
   </form>
-  <div id="state">
+  <div id="state" hx-get="telescope/{{ info.id }}/state" hx-trigger="every 1s">
     {{ state_html }}
   </div>
 </div>
