@@ -42,14 +42,7 @@
       <button>Park</button>
     </p>
   </form>
-  <h2>State</h2>
-  <p>
-    Status: {{ status }}
-  </p>
-  <p>
-    Azimuth: {{ direction.azimuth.to_degrees() }}
-  </p>
-  <p>
-    Altitude: {{ direction.altitude.to_degrees() }}
-  </p>
+  <div id="state">
+    {{ state_html }}
+  </div>
 </div>
