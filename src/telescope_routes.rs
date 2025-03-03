@@ -1,7 +1,5 @@
-use std::sync::Arc;
-
 use crate::coords::Direction;
-use crate::telescope::{Telescope, TelescopeCollectionHandle};
+use crate::telescope::{TelescopeCollectionHandle, TelescopeHandle};
 use crate::telescopes::{ReceiverConfiguration, ReceiverError, TelescopeStatus};
 use crate::telescopes::{TelescopeError, TelescopeInfo, TelescopeTarget};
 use askama::Template;
@@ -13,7 +11,6 @@ use axum::{
     response::{IntoResponse, Response},
     routing::{get, post},
 };
-use tokio::sync::Mutex;
 
 pub fn routes(telescopes: TelescopeCollectionHandle) -> Router {
     let telescope_routes = Router::new()
@@ -35,7 +32,6 @@ async fn get_telescopes(
     let mut telescope_infos = Vec::<TelescopeInfo>::new();
     for (name, telescope) in telescopes.all().await.iter() {
         log::trace!("Checking {}", name);
-        let telescope = telescope.telescope.lock().await;
         if let Ok(info) = telescope.get_info().await {
             log::trace!("Accepted {}", name);
             telescope_infos.push(info);
@@ -62,19 +58,14 @@ impl From<TelescopeError> for TelescopeNotFound {
     }
 }
 
-async fn extract_telescope(
-    telescopes: TelescopeCollectionHandle,
-    id: String,
-) -> Result<tokio::sync::OwnedMutexGuard<dyn Telescope>, TelescopeNotFound> {
-    let telescope = telescopes.get(&id).await.ok_or(TelescopeNotFound)?;
-    Ok(telescope.telescope.clone().lock_owned().await)
-}
-
 async fn get_telescope(
     State(telescopes): State<TelescopeCollectionHandle>,
     Path(telescope_id): Path<String>,
 ) -> Result<Json<Result<TelescopeInfo, TelescopeError>>, TelescopeNotFound> {
-    let telescope = extract_telescope(telescopes, telescope_id).await?;
+    let telescope = telescopes
+        .get(&telescope_id)
+        .await
+        .ok_or(TelescopeNotFound)?;
     Ok(Json(telescope.get_info().await))
 }
 
@@ -82,7 +73,10 @@ async fn get_direction(
     State(telescopes): State<TelescopeCollectionHandle>,
     Path(telescope_id): Path<String>,
 ) -> Result<Json<Result<Direction, TelescopeError>>, TelescopeNotFound> {
-    let telescope = extract_telescope(telescopes, telescope_id).await?;
+    let telescope = telescopes
+        .get(&telescope_id)
+        .await
+        .ok_or(TelescopeNotFound)?;
     Ok(Json(telescope.get_direction().await))
 }
 
@@ -90,7 +84,10 @@ async fn get_target(
     State(telescopes): State<TelescopeCollectionHandle>,
     Path(telescope_id): Path<String>,
 ) -> Result<Json<Result<TelescopeTarget, TelescopeError>>, TelescopeNotFound> {
-    let telescope = extract_telescope(telescopes, telescope_id).await?;
+    let telescope = telescopes
+        .get(&telescope_id)
+        .await
+        .ok_or(TelescopeNotFound)?;
     Ok(Json(telescope.get_target().await))
 }
 
@@ -99,7 +96,10 @@ async fn set_target(
     Path(telescope_id): Path<String>,
     Json(target): Json<TelescopeTarget>,
 ) -> Result<Json<Result<TelescopeTarget, TelescopeError>>, TelescopeNotFound> {
-    let mut telescope = extract_telescope(telescopes, telescope_id).await?;
+    let mut telescope = telescopes
+        .get(&telescope_id)
+        .await
+        .ok_or(TelescopeNotFound)?;
     Ok(Json(telescope.set_target(target).await))
 }
 
@@ -107,7 +107,10 @@ async fn restart(
     State(telescopes): State<TelescopeCollectionHandle>,
     Path(telescope_id): Path<String>,
 ) -> Result<Json<Result<(), TelescopeError>>, TelescopeNotFound> {
-    let mut telescope = extract_telescope(telescopes, telescope_id).await?;
+    let mut telescope = telescopes
+        .get(&telescope_id)
+        .await
+        .ok_or(TelescopeNotFound)?;
     Ok(Json(telescope.restart().await))
 }
 
@@ -116,7 +119,10 @@ async fn set_receiver_configuration(
     Path(telescope_id): Path<String>,
     Json(target): Json<ReceiverConfiguration>,
 ) -> Result<Json<Result<ReceiverConfiguration, ReceiverError>>, TelescopeNotFound> {
-    let mut telescope = extract_telescope(telescopes, telescope_id).await?;
+    let mut telescope = telescopes
+        .get(&telescope_id)
+        .await
+        .ok_or(TelescopeNotFound)?;
     Ok(Json(telescope.set_receiver_configuration(target).await))
 }
 
@@ -128,7 +134,7 @@ pub async fn get_state(
         .get(&telescope_id)
         .await
         .ok_or(TelescopeNotFound)?;
-    Ok(Html(state(telescope.telescope.clone()).await?))
+    Ok(Html(state(telescope).await?))
 }
 
 #[derive(Template)]
@@ -139,8 +145,7 @@ struct TelescopeStateTemplate {
     direction: Direction,
 }
 
-pub async fn state(telescope: Arc<Mutex<dyn Telescope>>) -> Result<String, TelescopeError> {
-    let telescope = telescope.lock_owned().await;
+pub async fn state(telescope: TelescopeHandle) -> Result<String, TelescopeError> {
     let info = telescope.get_info().await?;
     Ok(TelescopeStateTemplate {
         info: info.clone(),
