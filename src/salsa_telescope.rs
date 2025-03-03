@@ -45,6 +45,107 @@ pub fn create(
     }
 }
 
+#[async_trait]
+impl Telescope for SalsaTelescope {
+    async fn get_direction(&self) -> Result<Direction, TelescopeError> {
+        self.controller.direction()
+    }
+
+    async fn get_target(&self) -> Result<TelescopeTarget, TelescopeError> {
+        self.controller.target()
+    }
+
+    async fn set_target(
+        &mut self,
+        target: TelescopeTarget,
+    ) -> Result<TelescopeTarget, TelescopeError> {
+        self.controller.set_target(target)
+    }
+
+    async fn set_receiver_configuration(
+        &mut self,
+        receiver_configuration: ReceiverConfiguration,
+    ) -> Result<ReceiverConfiguration, ReceiverError> {
+        if receiver_configuration.integrate && !self.receiver_configuration.integrate {
+            if self.active_integration.is_some() {
+                return Err(ReceiverError::IntegrationAlreadyRunning);
+            }
+
+            log::info!("Starting integration");
+            self.receiver_configuration.integrate = true;
+            let cancellation_token = CancellationToken::new();
+            let measurement_task = {
+                let address = self.receiver_address.clone();
+                let measurements = self.measurements.clone();
+                let cancellation_token = cancellation_token.clone();
+                tokio::spawn(async move {
+                    measure(address, measurements, cancellation_token).await;
+                })
+            };
+            self.active_integration = Some(ActiveIntegration {
+                cancellation_token,
+                measurement_task,
+            });
+        } else if !receiver_configuration.integrate && self.receiver_configuration.integrate {
+            log::info!("Stopping integration");
+            if let Some(active_integration) = &mut self.active_integration {
+                active_integration.cancellation_token.cancel();
+            }
+            self.receiver_configuration.integrate = false;
+        }
+        Ok(self.receiver_configuration)
+    }
+
+    async fn get_info(&self) -> Result<TelescopeInfo, TelescopeError> {
+        let controller_info = self.controller.info()?;
+
+        let latest_observation = {
+            let measurements = self.measurements.lock().await;
+            match measurements.last() {
+                None => None,
+                Some(measurement) => {
+                    let measurement = measurement.clone();
+                    let latest_observation = ObservedSpectra {
+                        frequencies: measurement.freqs,
+                        spectra: measurement.amps,
+                        observation_time: measurement.duration,
+                    };
+                    Some(latest_observation)
+                }
+            }
+        };
+
+        Ok(TelescopeInfo {
+            id: self.name.clone(),
+            status: controller_info.status,
+            current_horizontal: controller_info.current_horizontal,
+            commanded_horizontal: controller_info.commanded_horizontal,
+            current_target: controller_info.target,
+            most_recent_error: controller_info.most_recent_error,
+            measurement_in_progress: self.active_integration.is_some(),
+            latest_observation,
+        })
+    }
+
+    async fn update(&mut self, _delta_time: Duration) -> Result<(), TelescopeError> {
+        if let Some(active_integration) = self.active_integration.take() {
+            if active_integration.measurement_task.is_finished() {
+                if let Err(error) = active_integration.measurement_task.await {
+                    log::error!("Error while waiting for measurement task: {}", error);
+                }
+            } else {
+                self.active_integration = Some(active_integration);
+            }
+        }
+        Ok(())
+    }
+
+    async fn restart(&mut self) -> Result<(), TelescopeError> {
+        self.controller.restart();
+        Ok(())
+    }
+}
+
 // Reading the documentation of the telescope, this should be the correct way to interpret the bytes
 // This would match how rot2prog_angle_to_bytes works.
 fn rot2prog_bytes_to_int_documented(bytes: &[u8]) -> u32 {
@@ -251,107 +352,6 @@ async fn measure(
             .signed_duration_since(measurement.start)
             .to_std()
             .unwrap();
-    }
-}
-
-#[async_trait]
-impl Telescope for SalsaTelescope {
-    async fn get_direction(&self) -> Result<Direction, TelescopeError> {
-        self.controller.direction()
-    }
-
-    async fn get_target(&self) -> Result<TelescopeTarget, TelescopeError> {
-        self.controller.target()
-    }
-
-    async fn set_target(
-        &mut self,
-        target: TelescopeTarget,
-    ) -> Result<TelescopeTarget, TelescopeError> {
-        self.controller.set_target(target)
-    }
-
-    async fn set_receiver_configuration(
-        &mut self,
-        receiver_configuration: ReceiverConfiguration,
-    ) -> Result<ReceiverConfiguration, ReceiverError> {
-        if receiver_configuration.integrate && !self.receiver_configuration.integrate {
-            if self.active_integration.is_some() {
-                return Err(ReceiverError::IntegrationAlreadyRunning);
-            }
-
-            log::info!("Starting integration");
-            self.receiver_configuration.integrate = true;
-            let cancellation_token = CancellationToken::new();
-            let measurement_task = {
-                let address = self.receiver_address.clone();
-                let measurements = self.measurements.clone();
-                let cancellation_token = cancellation_token.clone();
-                tokio::spawn(async move {
-                    measure(address, measurements, cancellation_token).await;
-                })
-            };
-            self.active_integration = Some(ActiveIntegration {
-                cancellation_token,
-                measurement_task,
-            });
-        } else if !receiver_configuration.integrate && self.receiver_configuration.integrate {
-            log::info!("Stopping integration");
-            if let Some(active_integration) = &mut self.active_integration {
-                active_integration.cancellation_token.cancel();
-            }
-            self.receiver_configuration.integrate = false;
-        }
-        Ok(self.receiver_configuration)
-    }
-
-    async fn get_info(&self) -> Result<TelescopeInfo, TelescopeError> {
-        let controller_info = self.controller.info()?;
-
-        let latest_observation = {
-            let measurements = self.measurements.lock().await;
-            match measurements.last() {
-                None => None,
-                Some(measurement) => {
-                    let measurement = measurement.clone();
-                    let latest_observation = ObservedSpectra {
-                        frequencies: measurement.freqs,
-                        spectra: measurement.amps,
-                        observation_time: measurement.duration,
-                    };
-                    Some(latest_observation)
-                }
-            }
-        };
-
-        Ok(TelescopeInfo {
-            id: self.name.clone(),
-            status: controller_info.status,
-            current_horizontal: controller_info.current_horizontal,
-            commanded_horizontal: controller_info.commanded_horizontal,
-            current_target: controller_info.target,
-            most_recent_error: controller_info.most_recent_error,
-            measurement_in_progress: self.active_integration.is_some(),
-            latest_observation,
-        })
-    }
-
-    async fn update(&mut self, _delta_time: Duration) -> Result<(), TelescopeError> {
-        if let Some(active_integration) = self.active_integration.take() {
-            if active_integration.measurement_task.is_finished() {
-                if let Err(error) = active_integration.measurement_task.await {
-                    log::error!("Error while waiting for measurement task: {}", error);
-                }
-            } else {
-                self.active_integration = Some(active_integration);
-            }
-        }
-        Ok(())
-    }
-
-    async fn restart(&mut self) -> Result<(), TelescopeError> {
-        self.controller.restart();
-        Ok(())
     }
 }
 
