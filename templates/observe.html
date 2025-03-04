@@ -11,13 +11,13 @@
       <label for="x">
         {% if target_mode == "galactic" %}Longitude [deg]{% else %}Right ascension [deg]{% endif %}
       </label>
-      <input type="text" id="x" name="x" value="{{ commanded_x.to_degrees() }}">
+      <input type="text" id="x" name="x" value="{{ commanded_x }}">
     </p>
     <p>
       <label for="y">
         {% if target_mode == "galactic" %}Latitude [deg]{% else %}Declination [deg]{% endif %}
       </label>
-      <input type="text" id="y" name="y" value="{{ commanded_y.to_degrees() }}">
+      <input type="text" id="y" name="y" value="{{ commanded_y }}">
     </p>
 
     <p>
@@ -34,10 +34,10 @@
     </p>
 
     <p>
-      <button hx-post="/observe" hx-target="#page">Go!</button>
+      <button hx-post="/observe" hx-target="#page" name="action" value="go">Go!</button>
     </p>
     <p>
-      <button>Park</button>
+      <button hx-post="/observe" hx-target="#page" name="action" value="park">Park</button>
     </p>
   </form>
   <div id="state" hx-get="telescope/{{ info.id }}/state" hx-trigger="every 1s">
