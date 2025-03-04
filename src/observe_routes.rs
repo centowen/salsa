@@ -128,36 +128,29 @@ struct ObserveTemplate {
 }
 
 async fn observe(telescope: TelescopeHandle) -> Result<String, TelescopeError> {
-    // We have to be a little careful about the locking.
-    // First extract all data needed for the primary template.
-    let (info, target_mode, commanded_x, commanded_y) = {
-        let info = telescope.get_info().await?;
-        let target_mode = match &info.current_target {
-            TelescopeTarget::Equatorial { .. } => "equatorial",
-            TelescopeTarget::Galactic { .. } => "galactic",
-            TelescopeTarget::Parked => "equatorial",
-            TelescopeTarget::Stopped => "equatorial",
-        }
-        .to_string();
-        let (commanded_x, commanded_y) = match info.current_target {
-            TelescopeTarget::Equatorial {
-                right_ascension: ra,
-                declination: dec,
-            } => (ra, dec),
-            TelescopeTarget::Galactic {
-                longitude: l,
-                latitude: b,
-            } => (l, b),
-            _ => (
-                info.current_horizontal.azimuth,
-                info.current_horizontal.altitude,
-            ),
-        };
-        (info, target_mode, commanded_x, commanded_y)
+    let info = telescope.get_info().await?;
+    let target_mode = match &info.current_target {
+        TelescopeTarget::Equatorial { .. } => "equatorial",
+        TelescopeTarget::Galactic { .. } => "galactic",
+        TelescopeTarget::Parked => "equatorial",
+        TelescopeTarget::Stopped => "equatorial",
+    }
+    .to_string();
+    let (commanded_x, commanded_y) = match info.current_target {
+        TelescopeTarget::Equatorial {
+            right_ascension: ra,
+            declination: dec,
+        } => (ra, dec),
+        TelescopeTarget::Galactic {
+            longitude: l,
+            latitude: b,
+        } => (l, b),
+        _ => (
+            info.current_horizontal.azimuth,
+            info.current_horizontal.altitude,
+        ),
     };
-    // After releasing all locks render the state subtemplate.
     let state_html = state(telescope.clone()).await?;
-    // Finally we can render the full template.
     Ok(ObserveTemplate {
         info,
         target_mode,
