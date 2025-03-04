@@ -27,6 +27,7 @@ struct Target {
     x: f64, // Degrees
     y: f64, // Degrees
     coordinate_system: String,
+    action: String,
 }
 
 enum ObserveError {
@@ -74,20 +75,24 @@ async fn post_observe(
 ) -> Result<impl IntoResponse, ObserveError> {
     let x_rad = target.x.to_radians();
     let y_rad = target.y.to_radians();
-    let target = match target.coordinate_system.as_str() {
-        "galactic" => TelescopeTarget::Galactic {
+    let target = match (target.action.as_str(), target.coordinate_system.as_str()) {
+        ("go", "galactic") => TelescopeTarget::Galactic {
             longitude: x_rad,
             latitude: y_rad,
         },
-        "equatorial" => TelescopeTarget::Equatorial {
+        ("go", "equatorial") => TelescopeTarget::Equatorial {
             right_ascension: x_rad,
             declination: y_rad,
         },
-        unknown => {
+        ("park", _) => TelescopeTarget::Parked,
+        ("go", coordinate_system) => {
             return Err(ObserveError::BadQuery(format!(
                 "Unkown coordinate system {}",
-                unknown
+                coordinate_system
             )));
+        }
+        (action, _) => {
+            return Err(ObserveError::BadQuery(format!("Unkown action {}", action)));
         }
     };
 
@@ -122,8 +127,8 @@ async fn get_observe(
 struct ObserveTemplate {
     info: TelescopeInfo,
     target_mode: String,
-    commanded_x: f64,
-    commanded_y: f64,
+    commanded_x: String,
+    commanded_y: String,
     state_html: String,
 }
 
@@ -138,16 +143,23 @@ async fn observe(telescope: TelescopeHandle) -> Result<String, TelescopeError> {
     .to_string();
     let (commanded_x, commanded_y) = match info.current_target {
         TelescopeTarget::Equatorial {
-            right_ascension: ra,
-            declination: dec,
-        } => (ra, dec),
+            right_ascension,
+            declination,
+        } => (
+            right_ascension.to_degrees().to_string(),
+            declination.to_degrees().to_string(),
+        ),
         TelescopeTarget::Galactic {
-            longitude: l,
-            latitude: b,
-        } => (l, b),
+            longitude,
+            latitude,
+        } => (
+            longitude.to_degrees().to_string(),
+            latitude.to_degrees().to_string(),
+        ),
+        TelescopeTarget::Parked => (String::new(), String::new()),
         _ => (
-            info.current_horizontal.azimuth,
-            info.current_horizontal.altitude,
+            info.current_horizontal.azimuth.to_degrees().to_string(),
+            info.current_horizontal.altitude.to_degrees().to_string(),
         ),
     };
     let state_html = state(telescope.clone()).await?;
