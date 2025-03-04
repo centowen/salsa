@@ -34,10 +34,6 @@
     </p>
 
     <p>
-      <label for="track">Track</label>
-      <input type="checkbox" name="track" {% if status == "Tracking" %}checked{% endif %}>
-    </p>
-    <p>
       <button hx-post="/observe" hx-target="#page">Go!</button>
     </p>
     <p>
