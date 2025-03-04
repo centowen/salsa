@@ -1,7 +1,7 @@
 use crate::index::render_main;
 use crate::telescope::{TelescopeCollectionHandle, TelescopeHandle};
 use crate::telescope_routes::state;
-use crate::telescopes::{TelescopeError, TelescopeInfo, TelescopeStatus, TelescopeTarget};
+use crate::telescopes::{TelescopeError, TelescopeInfo, TelescopeTarget};
 use askama::Template;
 use axum::Form;
 use axum::body::Body;
@@ -22,7 +22,6 @@ pub fn routes(telescopes: TelescopeCollectionHandle) -> Router {
         .with_state(telescopes.clone())
 }
 
-// TODO: Support tracking toggle.
 #[derive(Deserialize, Debug)]
 struct Target {
     x: f64, // Degrees
@@ -122,7 +121,6 @@ async fn get_observe(
 #[template(path = "observe.html", escape = "none")]
 struct ObserveTemplate {
     info: TelescopeInfo,
-    status: String,
     target_mode: String,
     commanded_x: f64,
     commanded_y: f64,
@@ -132,7 +130,7 @@ struct ObserveTemplate {
 async fn observe(telescope: TelescopeHandle) -> Result<String, TelescopeError> {
     // We have to be a little careful about the locking.
     // First extract all data needed for the primary template.
-    let (info, status, target_mode, commanded_x, commanded_y) = {
+    let (info, target_mode, commanded_x, commanded_y) = {
         let info = telescope.get_info().await?;
         let target_mode = match &info.current_target {
             TelescopeTarget::Equatorial { .. } => "equatorial",
@@ -155,19 +153,13 @@ async fn observe(telescope: TelescopeHandle) -> Result<String, TelescopeError> {
                 info.current_horizontal.altitude,
             ),
         };
-        let status = match &info.status {
-            TelescopeStatus::Idle => "Idle".to_string(),
-            TelescopeStatus::Slewing => "Slewing".to_string(),
-            TelescopeStatus::Tracking => "Tracking".to_string(),
-        };
-        (info, status, target_mode, commanded_x, commanded_y)
+        (info, target_mode, commanded_x, commanded_y)
     };
     // After releasing all locks render the state subtemplate.
     let state_html = state(telescope.clone()).await?;
     // Finally we can render the full template.
     Ok(ObserveTemplate {
         info,
-        status,
         target_mode,
         commanded_x,
         commanded_y,
