@@ -3,13 +3,14 @@ use crate::telescope::{TelescopeCollectionHandle, TelescopeHandle};
 use crate::telescopes::{ReceiverConfiguration, ReceiverError, TelescopeStatus};
 use crate::telescopes::{TelescopeError, TelescopeInfo, TelescopeTarget};
 use askama::Template;
-use axum::response::Html;
+use axum::extract::ws::{Message, Utf8Bytes};
 use axum::{
     Router,
+    extract::ws::{WebSocket, WebSocketUpgrade},
     extract::{Json, Path, State},
     http::StatusCode,
-    response::{IntoResponse, Response},
-    routing::{get, post},
+    response::{Html, IntoResponse, Response},
+    routing::{any, get, post},
 };
 
 pub fn routes(telescopes: TelescopeCollectionHandle) -> Router {
@@ -19,11 +20,30 @@ pub fn routes(telescopes: TelescopeCollectionHandle) -> Router {
         .route("/target", get(get_target).post(set_target))
         .route("/restart", post(restart))
         .route("/receiver", post(set_receiver_configuration))
-        .route("/state", get(get_state));
+        .route("/state", get(get_state))
+        .route("/spectrum", any(spectrum_handle_upgrade));
     Router::new()
         .route("/", get(get_telescopes))
         .nest("/{telescope_id}", telescope_routes)
         .with_state(telescopes)
+}
+
+async fn spectrum_handle_upgrade(upgrade: WebSocketUpgrade) -> impl IntoResponse {
+    // WebSockets come in as a regular HTTP request, that connection is then
+    // upgraded to a socket.
+    upgrade.on_upgrade(spectrum_handle_websocket)
+}
+
+async fn spectrum_handle_websocket(mut socket: WebSocket) {
+    match socket
+        .send(Message::Text(Utf8Bytes::from("hello world")))
+        .await
+    {
+        _ => return,
+    }
+    // Real implementation
+    // Send on socket
+    // Receive ctrl messages from socket?
 }
 
 async fn get_telescopes(

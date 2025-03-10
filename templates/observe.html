@@ -52,6 +52,13 @@
               .appendChild(svg.node());
       })();
     </script>
+    <!-- KNARK: This is bogus test code that we don't want to merge -->
+    <script>
+      const exampleSocket = new WebSocket("/telescope/fake/spectrum");
+      exampleSocket.onmessage = (event) => {
+          console.log(event.data);
+      };
+    </script>
   </div>
   <h2>Target</h2>
   <form>
