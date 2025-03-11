@@ -81,11 +81,6 @@ pub enum TelescopeError {
     TelescopeNotConnected,
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Debug, Copy, Clone)]
-pub enum ReceiverError {
-    IntegrationAlreadyRunning,
-}
-
 impl Display for TelescopeError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -104,6 +99,19 @@ impl Display for TelescopeError {
 impl From<std::io::Error> for TelescopeError {
     fn from(error: std::io::Error) -> Self {
         TelescopeError::TelescopeIOError(format!("Communication with telescope failed: {}", error))
+    }
+}
+
+#[derive(Serialize, Deserialize, PartialEq, Debug, Copy, Clone)]
+pub enum ReceiverError {
+    IntegrationAlreadyRunning,
+}
+
+impl Display for ReceiverError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ReceiverError::IntegrationAlreadyRunning => f.write_str("Integration already running"),
+        }
     }
 }
 

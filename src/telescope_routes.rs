@@ -3,7 +3,7 @@ use crate::telescope::{TelescopeCollectionHandle, TelescopeHandle};
 use crate::telescopes::{ReceiverConfiguration, ReceiverError, TelescopeStatus};
 use crate::telescopes::{TelescopeError, TelescopeInfo, TelescopeTarget};
 use askama::Template;
-use axum::extract::ws::{Message, Utf8Bytes};
+use axum::extract::ws::Message;
 use axum::{
     Router,
     extract::ws::{WebSocket, WebSocketUpgrade},
@@ -12,6 +12,8 @@ use axum::{
     response::{Html, IntoResponse, Response},
     routing::{any, get, post},
 };
+use tokio::time::Duration;
+use tokio_util::bytes::Bytes;
 
 pub fn routes(telescopes: TelescopeCollectionHandle) -> Router {
     let telescope_routes = Router::new()
@@ -28,22 +30,42 @@ pub fn routes(telescopes: TelescopeCollectionHandle) -> Router {
         .with_state(telescopes)
 }
 
-async fn spectrum_handle_upgrade(upgrade: WebSocketUpgrade) -> impl IntoResponse {
+async fn spectrum_handle_upgrade(
+    upgrade: WebSocketUpgrade,
+    State(telescopes): State<TelescopeCollectionHandle>,
+    Path(telescope_id): Path<String>,
+) -> Result<impl IntoResponse, TelescopeNotFound> {
+    let telescope = telescopes
+        .get(&telescope_id)
+        .await
+        .ok_or(TelescopeNotFound)?;
     // WebSockets come in as a regular HTTP request, that connection is then
     // upgraded to a socket.
-    upgrade.on_upgrade(spectrum_handle_websocket)
+    Ok(upgrade.on_upgrade(move |socket| spectrum_handle_websocket(socket, telescope)))
 }
 
-async fn spectrum_handle_websocket(mut socket: WebSocket) {
-    match socket
-        .send(Message::Text(Utf8Bytes::from("hello world")))
-        .await
-    {
-        _ => return,
+async fn spectrum_handle_websocket(mut socket: WebSocket, telescope: TelescopeHandle) {
+    loop {
+        let info = telescope.get_info().await;
+        // Somehow signal the error ...
+        if let Ok(info) = info {
+            if let Some(observation) = info.latest_observation {
+                // Needed this temporary vector to convince Bytes::from that it
+                // could convert. The underlying buffer is maybe just moved?
+                let byte_vec: Vec<u8> = observation
+                    .spectra
+                    .iter()
+                    .flat_map(|v| v.to_le_bytes())
+                    .collect();
+                match socket.send(Message::Binary(Bytes::from(byte_vec))).await {
+                    Ok(_) => (),
+                    // No-one is listening anymore.
+                    Err(_) => return,
+                }
+            }
+        }
+        tokio::time::sleep(Duration::from_secs(1)).await;
     }
-    // Real implementation
-    // Send on socket
-    // Receive ctrl messages from socket?
 }
 
 async fn get_telescopes(
