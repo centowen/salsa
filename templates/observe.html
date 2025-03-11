@@ -52,11 +52,16 @@
               .appendChild(svg.node());
       })();
     </script>
-    <!-- KNARK: This is bogus test code that we don't want to merge -->
     <script>
-      const exampleSocket = new WebSocket("/telescope/fake/spectrum");
-      exampleSocket.onmessage = (event) => {
-          console.log(event.data);
+      // There can be a socket already here if the page is refetched by htmx.
+      if (window.spectrumSocket) {
+          window.spectrumSocket.close();
+      }
+      window.spectrumSocket = new WebSocket("/telescope/fake/spectrum");
+      window.spectrumSocket.onmessage = async (event) => {
+          // We get raw spectrum values from the backend.
+          let dataView = new DataView(await event.data.arrayBuffer());
+          console.log("Got a value at 64: " + dataView.getFloat64(64, true));
       };
     </script>
   </div>
