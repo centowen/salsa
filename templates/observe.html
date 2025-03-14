@@ -8,83 +8,8 @@
   <div id="errors">
   </div>
   <div id="chart">
-    <script>
-      (function() {
-          const width = 800;
-          const height = 600;
-          const margin = 50;
-
-          const x = d3.scaleLinear()
-                .domain([0, 100])
-                .range([margin, width - margin]);
-          const y = d3.scaleLinear()
-                .domain([0, 100])
-                .range([height - margin, margin]);
-          const svg = d3.create("svg")
-                .attr("id", "measurement")
-                .attr("width", width)
-                .attr("height", height)
-                .attr("viewBox", [0, 0, width, height])
-                .attr("style", "max-width: 100%; height: auto; height: intrinsic;");
-          const line = d3.line()
-                .x(d => x(d.x))
-                .y(d => y(d.y));
-          // x-axis
-          svg.append("g")
-              .attr("transform", `translate(0,${height - margin})`)
-              .call(d3.axisBottom(x).ticks(width / 80).tickSizeOuter(0));
-          // y-axis
-          svg.append("g")
-              .attr("transform", `translate(${margin},0)`)
-              .call(d3.axisLeft(y).ticks(height / 80))
-              .call(g => g.append("text")
-                    .attr("x", -margin)
-                    .attr("y", 10)
-                    .attr("text-anchor", "start")
-                    .text("Amplitude"));
-          svg.append("path")
-              .attr("class", "line")
-              .attr("fill", "none")
-              .attr("stroke", "steelblue")
-              .attr("stroke-width", 1.5);
-          document
-              .currentScript
-              .parentElement
-              .appendChild(svg.node());
-      })();
-    </script>
-    <script>
-      // There can be a socket already here if the page is refetched by htmx.
-      if (window.spectrumSocket) {
-          window.spectrumSocket.close();
-      }
-      window.spectrumSocket = new WebSocket("/telescope/fake/spectrum");
-      window.spectrumSocket.onmessage = async (event) => {
-          // We get raw spectrum values from the backend.
-          let dataView = new DataView(await event.data.arrayBuffer());
-          let data = [];
-          for (let i = 0; i < dataView.byteLength; i += 8) {
-              data.push({x: i, y: dataView.getFloat64(i, true)});
-          }
-          // How do I avoid duplicating this?
-          const width = 800;
-          const height = 600;
-          const margin = 50;
-          const x = d3.scaleLinear()
-                .domain(d3.extent(data, d => d.x))
-                .range([margin, width - margin]);
-          const y = d3.scaleLinear()
-                .domain([0, 100])
-                .range([height - margin, margin]);
-          const line = d3.line()
-                .x(d => x(d.x))
-                .y(d => y(d.y));
-          const svg = d3.select("#measurement");
-          svg.select(".line")
-              .datum(data)
-              .attr("d", line);
-      };
-    </script>
+    <!-- FIXME: maybe don't reload this javascript on each htmx fetch of this page? -->
+    <script src="/observe_chart.js"></script>
   </div>
   <h2>Target</h2>
   <form>
