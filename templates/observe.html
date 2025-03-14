@@ -1,9 +1,15 @@
+
+<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
 <div class="section light">
   <h1> Please observe!</h1>
   <p>
     Telescope: {{ info.id }}
   </p>
   <div id="errors">
+  </div>
+  <div id="chart">
+    <!-- FIXME: maybe don't reload this javascript on each htmx fetch of this page? -->
+    <script src="/observe_chart.js"></script>
   </div>
   <h2>Target</h2>
   <form>
@@ -44,3 +50,4 @@
     {{ state_html }}
   </div>
 </div>
+

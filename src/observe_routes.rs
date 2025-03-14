@@ -1,7 +1,9 @@
 use crate::index::render_main;
 use crate::telescope::{TelescopeCollectionHandle, TelescopeHandle};
 use crate::telescope_routes::state;
-use crate::telescopes::{TelescopeError, TelescopeInfo, TelescopeTarget};
+use crate::telescopes::{
+    ReceiverConfiguration, ReceiverError, TelescopeError, TelescopeInfo, TelescopeTarget,
+};
 use askama::Template;
 use axum::Form;
 use axum::body::Body;
@@ -33,6 +35,7 @@ struct Target {
 enum ObserveError {
     BadQuery(String),
     TelescopeError(TelescopeError),
+    ReceiverError(ReceiverError),
     TelescopeNotFound(String),
 }
 
@@ -44,6 +47,7 @@ impl IntoResponse for ObserveError {
             ObserveError::TelescopeNotFound(id) => {
                 error_response(format!("Could not find telescope {}", id))
             }
+            ObserveError::ReceiverError(receiver_error) => receiver_error.into_response(),
         }
     }
 }
@@ -55,8 +59,20 @@ impl From<TelescopeError> for ObserveError {
 }
 
 impl IntoResponse for TelescopeError {
-    fn into_response(self) -> axum::response::Response {
-        error_response(format!("{}", self))
+    fn into_response(self) -> Response {
+        error_response(format!("{self}"))
+    }
+}
+
+impl From<ReceiverError> for ObserveError {
+    fn from(receiver_error: ReceiverError) -> Self {
+        ObserveError::ReceiverError(receiver_error)
+    }
+}
+
+impl IntoResponse for ReceiverError {
+    fn into_response(self) -> Response {
+        error_response(format!("{self}"))
     }
 }
 
@@ -101,6 +117,10 @@ async fn post_observe(
         .await
         .ok_or(ObserveError::TelescopeNotFound("fake".to_string()))?;
     telescope.set_target(target).await?;
+    // FIXME: Don't set integrate to true immediately, control from UI instead.
+    telescope
+        .set_receiver_configuration(ReceiverConfiguration { integrate: true })
+        .await?;
     let content = observe(telescope.clone()).await?;
     Ok(Html(content))
 }
