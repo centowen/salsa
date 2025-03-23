@@ -40,13 +40,13 @@
     </p>
 
     <p>
-      <button hx-post="/observe" hx-target="#page" name="action" value="go">Go!</button>
+      <button hx-post="#" hx-target="#page" name="action" value="go">Go!</button>
     </p>
     <p>
-      <button hx-post="/observe" hx-target="#page" name="action" value="park">Park</button>
+      <button hx-post="#" hx-target="#page" name="action" value="park">Park</button>
     </p>
   </form>
-  <div id="state" hx-get="telescope/{{ info.id }}/state" hx-trigger="every 1s">
+  <div id="state" hx-get="/telescope/{{ info.id }}/state" hx-trigger="every 1s">
     {{ state_html }}
   </div>
 </div>
