@@ -7,7 +7,7 @@ use crate::telescopes::{
 use askama::Template;
 use axum::Form;
 use axum::body::Body;
-use axum::extract::State;
+use axum::extract::{Path, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{Html, IntoResponse, Response};
 use axum::{
@@ -17,11 +17,12 @@ use axum::{
 use serde::Deserialize;
 
 pub fn routes(telescopes: TelescopeCollectionHandle) -> Router {
-    Router::new()
+    let observe_routes = Router::new()
         .route("/", get(get_observe))
-        .with_state(telescopes.clone())
-        .route("/", post(post_observe))
-        .with_state(telescopes.clone())
+        .route("/", post(post_observe));
+    Router::new()
+        .nest("/{telescope_id}", observe_routes)
+        .with_state(telescopes)
 }
 
 #[derive(Deserialize, Debug)]
@@ -87,6 +88,7 @@ fn error_response(message: String) -> Response {
 
 async fn post_observe(
     State(telescopes): State<TelescopeCollectionHandle>,
+    Path(telescope_id): Path<String>,
     Form(target): Form<Target>,
 ) -> Result<impl IntoResponse, ObserveError> {
     let x_rad = target.x.to_radians();
@@ -113,7 +115,7 @@ async fn post_observe(
     };
 
     let mut telescope = telescopes
-        .get("fake")
+        .get(&telescope_id)
         .await
         .ok_or(ObserveError::TelescopeNotFound("fake".to_string()))?;
     telescope.set_target(target).await?;
@@ -127,10 +129,11 @@ async fn post_observe(
 
 async fn get_observe(
     State(telescopes): State<TelescopeCollectionHandle>,
+    Path(telescope_id): Path<String>,
     headers: HeaderMap,
 ) -> Result<impl IntoResponse, ObserveError> {
     let telescope = telescopes
-        .get("fake")
+        .get(&telescope_id)
         .await
         .ok_or(ObserveError::TelescopeNotFound("fake".to_string()))?;
     let content = observe(telescope.clone()).await?;
