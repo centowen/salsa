@@ -17,6 +17,17 @@ or
 cargo run --bin backend
 ```
 
+# Documentation
+
+Note that the following documentation links are for the current Salsa observation system. This
+repository contains the next generation observation system under development. It
+is nevertheless useful as a reference for development.
+
+* [Current Salsa documentation](https://brage.oso.chalmers.se/salsa/support)
+* [Current Salsa manual](https://raw.githubusercontent.com/varenius/salsa/main/User_manual/English/SALSA-USERMANUAL_English.pdf)
+
+# Advanced
+
 ## Running with https
 If you want to work with authentication you should enable https. Otherwise password will not be encrypted in transit and redirect will not work properly (identity server will typically only allow redirect to https address). To run salsa with https a little more work is needed. It will also not be possible to use trunk.
 
