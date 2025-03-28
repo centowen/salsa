@@ -2,10 +2,10 @@
 <p>
   Status: {{ status }}
 </p>
-<h3>Horizontal coordinates</h3>
+<h3>Current horizontal coordinates</h3>
 <p>
-  Azimuth: {{ direction.azimuth.to_degrees() }}
+  Azimuth: {{ "{:.3}"|format(direction.azimuth.to_degrees()) }}
 </p>
 <p>
-  Altitude: {{ direction.altitude.to_degrees() }}
+  Altitude: {{ "{:.3}"|format(direction.altitude.to_degrees()) }}
 </p>
