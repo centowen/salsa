@@ -1,6 +1,10 @@
 use async_trait::async_trait;
+use deadpool_sqlite::{Config, CreatePoolError, Pool, PoolError, Runtime};
+use log::debug;
+use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use std::io;
+use std::path::PathBuf;
 use std::sync::Arc;
 use thiserror::Error;
 use tokio::fs;
@@ -74,6 +78,47 @@ where
     StorageType: Storage,
 {
     storage: Arc<RwLock<StorageType>>,
+}
+
+#[derive(Debug, Error)]
+pub enum SqliteDatabaseError {
+    #[error("Could not open database: {source}")]
+    RusqliteError {
+        #[from]
+        source: rusqlite::Error,
+    },
+    #[error("Could not setup database connection pool: {source}")]
+    CreatePoolError {
+        #[from]
+        source: CreatePoolError,
+    },
+    #[error("Could not setup database connection pool: {source}")]
+    PoolError {
+        #[from]
+        source: PoolError,
+    },
+}
+
+mod embedded {
+    use refinery::embed_migrations;
+    embed_migrations!("./sql_migrations");
+}
+
+pub fn apply_migrations(mut connection: Connection) -> Result<(), SqliteDatabaseError> {
+    let report = embedded::migrations::runner().run(&mut connection).unwrap();
+    debug!("Applied migrations\n{:?}", report);
+    Ok(())
+}
+
+pub fn create_sqlite_database_on_disk(
+    file_path: impl Into<PathBuf>,
+) -> Result<Pool, SqliteDatabaseError> {
+    let file_path = file_path.into();
+    let connection = Connection::open(&file_path)?;
+    apply_migrations(connection)?;
+    let cfg = Config::new(file_path);
+    let pool = cfg.create_pool(Runtime::Tokio1)?;
+    Ok(pool)
 }
 
 /// Create an in-memory database.

@@ -1,7 +1,7 @@
 use axum::{Router, routing::get};
 use axum_server::tls_rustls::RustlsConfig;
 use clap::Parser;
-use database::create_database_from_directory;
+use database::{create_database_from_directory, create_sqlite_database_on_disk};
 use std::net::SocketAddr;
 use telescope::create_telescope_collection;
 use tower_http::services::ServeDir;
@@ -42,6 +42,9 @@ async fn main() {
     let database = create_database_from_directory("database.json")
         .await
         .expect("failed to create database");
+
+    let _sqlite_database = create_sqlite_database_on_disk("database.sqlite3")
+        .expect("failed to create sqlite database");
 
     let telescopes = create_telescope_collection(&database)
         .await
