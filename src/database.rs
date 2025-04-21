@@ -199,7 +199,7 @@ mod test {
             data_model
         })
         .await
-        .expect("msshould be able to set db data");
+        .expect("should be able to set db data");
         let data = db.get_data().await.expect("should be able to get db data");
         assert_eq!(data.bookings, vec![booking]);
     }
@@ -224,13 +224,13 @@ mod test {
             data_model
         })
         .await
-        .expect("msshould be able to set db data");
+        .expect("should be able to set db data");
         db.update_data(|mut data_model| {
             data_model.bookings.push(booking2.clone());
             data_model
         })
         .await
-        .expect("msshould be able to set db data");
+        .expect("should be able to set db data");
         let data = db.get_data().await.expect("should be able to get db data");
         assert_eq!(data.bookings, vec![booking1, booking2]);
     }
