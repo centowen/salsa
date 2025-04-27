@@ -1,11 +1,12 @@
+use crate::authentication::User;
 use crate::bookings::Booking;
 use crate::database::{DataBase, Storage};
 use crate::index::render_main;
 use crate::template::HtmlTemplate;
 use askama::Template;
-use axum::Form;
 use axum::http::HeaderMap;
 use axum::response::{Html, IntoResponse};
+use axum::{Extension, Form};
 use axum::{Router, extract::State, routing::get};
 use chrono::{DateTime, Duration, NaiveDate, NaiveDateTime, NaiveTime, TimeZone, Utc};
 use serde::Deserialize;
@@ -24,6 +25,7 @@ struct BookingsTemplate {
 }
 
 async fn get_bookings<StorageType>(
+    Extension(user): Extension<User>,
     headers: HeaderMap,
     State(db): State<DataBase<StorageType>>,
 ) -> impl IntoResponse
@@ -49,7 +51,7 @@ where
     let content = if headers.get("hx-request").is_some() {
         content
     } else {
-        render_main(content)
+        render_main(user.name, content)
     };
     Html(content).into_response()
 }

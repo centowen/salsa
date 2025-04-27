@@ -1,3 +1,4 @@
+use crate::authentication::User;
 use crate::index::render_main;
 use crate::telescope::{TelescopeCollectionHandle, TelescopeHandle};
 use crate::telescope_routes::state;
@@ -5,11 +6,11 @@ use crate::telescopes::{
     ReceiverConfiguration, ReceiverError, TelescopeError, TelescopeInfo, TelescopeTarget,
 };
 use askama::Template;
-use axum::Form;
 use axum::body::Body;
 use axum::extract::{Path, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{Html, IntoResponse, Response};
+use axum::{Extension, Form};
 use axum::{
     Router,
     routing::{get, post},
@@ -128,6 +129,7 @@ async fn post_observe(
 }
 
 async fn get_observe(
+    Extension(user): Extension<User>,
     State(telescopes): State<TelescopeCollectionHandle>,
     Path(telescope_id): Path<String>,
     headers: HeaderMap,
@@ -140,7 +142,7 @@ async fn get_observe(
     let content = if headers.get("hx-request").is_some() {
         content
     } else {
-        render_main(content)
+        render_main(user.name, content)
     };
     Ok(Html(content))
 }
