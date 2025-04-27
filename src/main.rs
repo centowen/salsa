@@ -1,4 +1,5 @@
-use axum::{Router, routing::get};
+use authentication::authenticate;
+use axum::{Router, middleware, routing::get};
 use axum_server::tls_rustls::RustlsConfig;
 use clap::Parser;
 use database::{create_database_from_directory, create_sqlite_database_on_disk};
@@ -6,6 +7,7 @@ use std::net::SocketAddr;
 use telescope::create_telescope_collection;
 use tower_http::services::ServeDir;
 
+mod authentication;
 mod bookings;
 mod coords;
 mod database;
@@ -62,7 +64,8 @@ async fn main() {
         .nest(
             "/api/bookings",
             bookings::api_routes::routes(database.clone()),
-        );
+        )
+        .route_layer(middleware::from_fn(authenticate));
 
     let assets_path = "assets";
     log::info!("serving asserts from {}", assets_path);

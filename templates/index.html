@@ -27,9 +27,15 @@
             </nav>
             <nav>
                 <menu>
+                    {% if name == "" %}
                     <li class="list-entry">
                         <a href="#">Login</a>
                     </li>
+                    {% else %}
+                    <li class="list-entry">
+                        Logged in as {{ name }}
+                    </li>
+                    {% endif %}
                 </menu>
             </nav>
         </header>
