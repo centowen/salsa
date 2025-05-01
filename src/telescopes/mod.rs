@@ -14,8 +14,7 @@ pub enum TelescopeTarget {
         longitude: f64, // in radians
         latitude: f64,  // in radians
     },
-    Parked,
-    Stopped,
+    Parked, // aka Stow
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Debug, Copy, Clone)]

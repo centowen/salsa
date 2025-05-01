@@ -25,7 +25,11 @@ pub struct TelescopeTracker {
 impl TelescopeTracker {
     pub fn new(controller_address: String) -> TelescopeTracker {
         let state = Arc::new(Mutex::new(TelescopeTrackerState {
-            target: TelescopeTarget::Stopped,
+            // TODO: This should be configurable, probably per telescope
+            target: TelescopeTarget::Galactic{
+                longitude: 140_f64.to_radians(),
+                latitude: 0.0,
+            },
             commanded_horizontal: None,
             current_direction: None,
             most_recent_error: None,
@@ -202,7 +206,6 @@ fn calculate_target_horizontal(
             longitude: l,
             latitude: b,
         } => Some(horizontal_from_galactic(location, when, l, b)),
-        TelescopeTarget::Stopped => None,
         TelescopeTarget::Parked => None,
     }
 }

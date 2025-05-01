@@ -161,7 +161,6 @@ async fn observe(telescope: TelescopeHandle) -> Result<String, TelescopeError> {
         TelescopeTarget::Equatorial { .. } => "equatorial",
         TelescopeTarget::Galactic { .. } => "galactic",
         TelescopeTarget::Parked => "equatorial",
-        TelescopeTarget::Stopped => "equatorial",
     }
     .to_string();
     let (commanded_x, commanded_y) = match info.current_target {

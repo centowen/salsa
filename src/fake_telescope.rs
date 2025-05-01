@@ -69,14 +69,13 @@ impl Telescope for FakeTelescope {
         self.current_spectra.clear();
 
         let target_horizontal =
-            calculate_target_horizontal(self.location, Utc::now(), target, self.horizontal);
+            calculate_target_horizontal(self.location, Utc::now(), target);
         if target_horizontal.altitude < LOWEST_ALLOWED_ALTITUDE {
             log::info!(
                 "Refusing to set target for telescope {} to {:?}. Target is below horizon",
                 &self.name,
                 &target
             );
-            self.target = TelescopeTarget::Stopped;
             Err(TelescopeError::TargetBelowHorizon)
         } else {
             log::info!(
@@ -105,15 +104,13 @@ impl Telescope for FakeTelescope {
 
     async fn get_info(&self) -> Result<TelescopeInfo, TelescopeError> {
         let target_horizontal =
-            calculate_target_horizontal(self.location, Utc::now(), self.target, self.horizontal);
+            calculate_target_horizontal(self.location, Utc::now(), self.target);
 
         let horizontal_offset_squared = (target_horizontal.azimuth - self.horizontal.azimuth)
             .powi(2)
             + (target_horizontal.altitude - self.horizontal.altitude).powi(2);
         let status = {
-            if self.target == TelescopeTarget::Stopped {
-                TelescopeStatus::Idle
-            } else if horizontal_offset_squared > 0.2f64.to_radians().powi(2) {
+            if horizontal_offset_squared > 0.2f64.to_radians().powi(2) {
                 TelescopeStatus::Slewing
             } else if self.target == TelescopeTarget::Parked {
                 TelescopeStatus::Idle
@@ -163,10 +160,9 @@ impl Telescope for FakeTelescope {
         let now = Utc::now();
         let current_horizontal = self.horizontal;
         let target_horizontal =
-            calculate_target_horizontal(self.location, now, self.target, current_horizontal);
+            calculate_target_horizontal(self.location, now, self.target);
 
         if target_horizontal.altitude < LOWEST_ALLOWED_ALTITUDE {
-            self.target = TelescopeTarget::Stopped;
             log::info!(
                 "Stopping telescope since target {:?} set below horizon.",
                 &self.target
@@ -220,7 +216,6 @@ fn calculate_target_horizontal(
     location: Location,
     when: DateTime<Utc>,
     target: TelescopeTarget,
-    current_horizontal: Direction,
 ) -> Direction {
     match target {
         TelescopeTarget::Equatorial {
@@ -231,7 +226,6 @@ fn calculate_target_horizontal(
             longitude: l,
             latitude: b,
         } => horizontal_from_galactic(location, when, l, b),
-        TelescopeTarget::Stopped => current_horizontal,
         TelescopeTarget::Parked => FAKE_TELESCOPE_PARKING_HORIZONTAL,
     }
 }
