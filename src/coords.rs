@@ -7,8 +7,8 @@ const EC: f64 = 0.40909260052;
 // The generally accepted motion of the Sun in the LSR is that it is moving at a speed of about
 // 20 km/s towards an “apex” that is rather close to the direction of Vega, with coordinates
 // R.A. = 18 hr = 270 deg, and Dec. = 30 deg. Define this apex as ARA, ADE:
-const ARA: f64 = 1.5*PI;
-const ADE: f64 = PI/6.0;
+const ARA: f64 = 1.5 * PI;
+const ADE: f64 = PI / 6.0;
 const R_EARTH: f64 = 6378.135; // Earth radius in km
 const FULL_CIRCLE: f64 = 2.0 * PI;
 
