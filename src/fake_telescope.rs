@@ -226,6 +226,10 @@ fn calculate_target_horizontal(
             longitude: l,
             latitude: b,
         } => horizontal_from_galactic(location, when, l, b),
+        TelescopeTarget::Horizontal {
+            azimuth: az,
+            elevation: el,
+        } => Direction{ azimuth: az, altitude: el },
         TelescopeTarget::Parked => FAKE_TELESCOPE_PARKING_HORIZONTAL,
     }
 }

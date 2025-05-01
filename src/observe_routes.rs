@@ -102,6 +102,10 @@ async fn post_observe(
             right_ascension: x_rad,
             declination: y_rad,
         },
+        ("go", "horizontal") => TelescopeTarget::Horizontal {
+            azimuth: x_rad,
+            elevation: y_rad,
+        },
         ("park", _) => TelescopeTarget::Parked,
         ("go", coordinate_system) => {
             return Err(ObserveError::BadQuery(format!(
@@ -160,6 +164,7 @@ async fn observe(telescope: TelescopeHandle) -> Result<String, TelescopeError> {
     let target_mode = match &info.current_target {
         TelescopeTarget::Equatorial { .. } => "equatorial",
         TelescopeTarget::Galactic { .. } => "galactic",
+        TelescopeTarget::Horizontal { .. } => "horizontal",
         TelescopeTarget::Parked => "equatorial",
     }
     .to_string();
@@ -178,11 +183,14 @@ async fn observe(telescope: TelescopeHandle) -> Result<String, TelescopeError> {
             longitude.to_degrees().to_string(),
             latitude.to_degrees().to_string(),
         ),
-        TelescopeTarget::Parked => (String::new(), String::new()),
-        _ => (
-            info.current_horizontal.azimuth.to_degrees().to_string(),
-            info.current_horizontal.altitude.to_degrees().to_string(),
+        TelescopeTarget::Horizontal {
+            azimuth,
+            elevation,
+        } => (
+            azimuth.to_degrees().to_string(),
+            elevation.to_degrees().to_string(),
         ),
+        TelescopeTarget::Parked => (String::new(), String::new()),
     };
     let state_html = state(telescope.clone()).await?;
     Ok(ObserveTemplate {
