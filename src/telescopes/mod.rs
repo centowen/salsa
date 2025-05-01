@@ -73,7 +73,7 @@ pub struct TelescopeDefinition {
     pub name: String,
     pub enabled: bool,
     pub location: Location,
-    pub min_altitude: f64,
+    pub min_elevation: f64,
     pub telescope_type: TelescopeType,
 }
 

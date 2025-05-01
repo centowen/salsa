@@ -21,13 +21,13 @@ pub struct Location {
 #[derive(Serialize, Deserialize, PartialEq, Debug, Copy, Clone)]
 pub struct Direction {
     pub azimuth: f64,
-    pub altitude: f64,
+    pub elevation: f64,
 }
 
 // Function to calculate satellite position for observe at given time
 // from https://celestrak.org/columns/v02n02/
 // satellite ECI xs,ys,zs in km
-// observer lat,long in radians, alt in km
+// observer lat,long in radians, el in km
 #[allow(dead_code)] // TODO: Remove when used.
 pub fn horizontal_from_sat_eci(
     xs: f64,
@@ -35,15 +35,15 @@ pub fn horizontal_from_sat_eci(
     zs: f64,
     lat: f64,
     lon: f64,
-    alt: f64,
+    el: f64,
     when: DateTime<Utc>,
 ) -> (f64, f64) {
     // Calculate ECI coordinates of observer position
     let theta = (gmst(when) + lon) % FULL_CIRCLE;
-    let r = (R_EARTH + alt) * lat.cos();
+    let r = (R_EARTH + el) * lat.cos();
     let xo = r * theta.cos();
     let yo = r * theta.sin();
-    let zo = (R_EARTH + alt) * lat.sin();
+    let zo = (R_EARTH + el) * lat.sin();
     // Form difference vector between satellite and observer
     let rx = xs - xo;
     let ry = ys - yo;
@@ -93,7 +93,7 @@ fn gmst(when: DateTime<Utc>) -> f64 {
 /// * `ra` - Right ascension in radians
 /// * `dec` - Declination in radians
 /// # Returns
-/// * `Direction` struct with azimuth and altitude
+/// * `Direction` struct with azimuth and elevation
 pub fn horizontal_from_equatorial(
     location: Location,
     when: DateTime<Utc>,
@@ -108,7 +108,7 @@ pub fn horizontal_from_equatorial(
 
     // Equatorial to Horizontal conversion from https://aa.usno.navy.mil/faq/alt_az
     let lha = (gmst(when) - ra).to_radians() * (15.0 * 12.0 / PI) + lon;
-    let alt = (lha.cos() * dec.cos() * lat.cos() + dec.sin() * lat.sin()).asin();
+    let el = (lha.cos() * dec.cos() * lat.cos() + dec.sin() * lat.sin()).asin();
     let az = (-lha.sin()).atan2(dec.tan() * lat.cos() - lat.sin() * lha.cos());
 
     // Ensure positive az
@@ -116,7 +116,7 @@ pub fn horizontal_from_equatorial(
 
     Direction {
         azimuth: az,
-        altitude: alt,
+        elevation: el,
     }
 }
 
@@ -272,9 +272,9 @@ mod test {
         let dir = horizontal_from_sun(locref, jdref);
         // Expected horizontal coordinates in radians
         let expected_az = 3.386904823113701;
-        let expected_alt = 0.6557470215389855;
+        let expected_el = 0.6557470215389855;
         assert_similar!(dir.azimuth, expected_az, 1e-6);
-        assert_similar!(dir.altitude, expected_alt, 1e-6);
+        assert_similar!(dir.elevation, expected_el, 1e-6);
     }
 
     #[test]
@@ -291,16 +291,16 @@ mod test {
 
     #[test]
     fn test_horizontal_from_sat_eci() {
-        //fn horizontal_from_sat_eci(xs: f64, ys: f64, zs: f64, lat: f64, lon: f64, alt: f64, when: DateTime<Utc>) -> (f64, f64) {
+        //fn horizontal_from_sat_eci(xs: f64, ys: f64, zs: f64, lat: f64, lon: f64, el: f64, when: DateTime<Utc>) -> (f64, f64) {
         // Test that we get the correct horizontal position for a satellite
         // with given ECI position at given time and location
         let jdref = Utc.with_ymd_and_hms(2023, 4, 5, 14, 0, 0).unwrap();
         let lon: f64 = 0.20802143022; // Obs lon
         let lat: f64 = 1.00170457462; // Obs lat
-        let alt: f64 = 0.0; // Obs alt in km
+        let el: f64 = 0.0; // Obs el in km
         let eci = (-22923.01754858807, 6273.375502631187, 17649.65857168936);
         let expected_hor = (54.385157764497684, 8.823870387817111);
-        let hor = horizontal_from_sat_eci(eci.0, eci.1, eci.2, lat, lon, alt, jdref);
+        let hor = horizontal_from_sat_eci(eci.0, eci.1, eci.2, lat, lon, el, jdref);
         assert_similar!(hor.0.to_degrees(), expected_hor.0, 1e-6);
         assert_similar!(hor.1.to_degrees(), expected_hor.1, 1e-6);
     }

@@ -55,7 +55,7 @@ impl TelescopeCommand {
                 let mut bytes = Vec::with_capacity(13);
                 bytes.extend(hex!("57"));
                 bytes.extend(rot2prog_angle_to_bytes(direction.azimuth).as_slice());
-                bytes.extend(rot2prog_angle_to_bytes(direction.altitude).as_slice());
+                bytes.extend(rot2prog_angle_to_bytes(direction.elevation).as_slice());
                 bytes.extend(hex!("5F20"));
                 bytes
             }
@@ -92,10 +92,10 @@ fn parse_direction_response(
 ) -> Result<TelescopeResponse, TelescopeError> {
     if bytes.len() == 12 && bytes[0] == 0x58 && bytes[11] == 0x20 {
         let azimuth = rot2prog_bytes_to_angle(&bytes[1..=5]);
-        let altitude = rot2prog_bytes_to_angle(&bytes[6..=10]);
+        let elevation = rot2prog_bytes_to_angle(&bytes[6..=10]);
         Ok(TelescopeResponse::CurrentDirection(Direction {
             azimuth,
-            altitude,
+            elevation,
         }))
     } else {
         Err(TelescopeError::TelescopeIOError(format!(
@@ -175,7 +175,7 @@ mod test {
             res,
             TelescopeResponse::CurrentDirection(Direction {
                 azimuth: 0.0,
-                altitude: 0.0,
+                elevation: 0.0,
             })
         );
     }
