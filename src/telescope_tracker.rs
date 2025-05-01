@@ -26,7 +26,7 @@ impl TelescopeTracker {
     pub fn new(controller_address: String) -> TelescopeTracker {
         let state = Arc::new(Mutex::new(TelescopeTrackerState {
             // TODO: This should be configurable, probably per telescope
-            target: TelescopeTarget::Galactic{
+            target: TelescopeTarget::Galactic {
                 longitude: 140_f64.to_radians(),
                 latitude: 0.0,
             },
@@ -209,7 +209,10 @@ fn calculate_target_horizontal(
         TelescopeTarget::Horizontal {
             azimuth: az,
             elevation: el,
-        } => Some(Direction{ azimuth: az, elevation: el }),
+        } => Some(Direction {
+            azimuth: az,
+            elevation: el,
+        }),
         TelescopeTarget::Parked => None,
     }
 }

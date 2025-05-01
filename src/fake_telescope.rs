@@ -68,8 +68,7 @@ impl Telescope for FakeTelescope {
         self.receiver_configuration.integrate = false;
         self.current_spectra.clear();
 
-        let target_horizontal =
-            calculate_target_horizontal(self.location, Utc::now(), target);
+        let target_horizontal = calculate_target_horizontal(self.location, Utc::now(), target);
         if target_horizontal.elevation < LOWEST_ALLOWED_ELEVATION {
             log::info!(
                 "Refusing to set target for telescope {} to {:?}. Target is below horizon",
@@ -103,8 +102,7 @@ impl Telescope for FakeTelescope {
     }
 
     async fn get_info(&self) -> Result<TelescopeInfo, TelescopeError> {
-        let target_horizontal =
-            calculate_target_horizontal(self.location, Utc::now(), self.target);
+        let target_horizontal = calculate_target_horizontal(self.location, Utc::now(), self.target);
 
         let horizontal_offset_squared = (target_horizontal.azimuth - self.horizontal.azimuth)
             .powi(2)
@@ -159,8 +157,7 @@ impl Telescope for FakeTelescope {
     async fn update(&mut self, delta_time: Duration) -> Result<(), TelescopeError> {
         let now = Utc::now();
         let current_horizontal = self.horizontal;
-        let target_horizontal =
-            calculate_target_horizontal(self.location, now, self.target);
+        let target_horizontal = calculate_target_horizontal(self.location, now, self.target);
 
         if target_horizontal.elevation < LOWEST_ALLOWED_ELEVATION {
             log::info!(
@@ -172,7 +169,8 @@ impl Telescope for FakeTelescope {
             let max_delta_angle = FAKE_TELESCOPE_SLEWING_SPEED * delta_time.as_secs_f64();
             self.horizontal.azimuth += (target_horizontal.azimuth - current_horizontal.azimuth)
                 .clamp(-max_delta_angle, max_delta_angle);
-            self.horizontal.elevation += (target_horizontal.elevation - current_horizontal.elevation)
+            self.horizontal.elevation += (target_horizontal.elevation
+                - current_horizontal.elevation)
                 .clamp(-max_delta_angle, max_delta_angle);
         }
 
@@ -229,7 +227,10 @@ fn calculate_target_horizontal(
         TelescopeTarget::Horizontal {
             azimuth: az,
             elevation: el,
-        } => Direction{ azimuth: az, elevation: el },
+        } => Direction {
+            azimuth: az,
+            elevation: el,
+        },
         TelescopeTarget::Parked => FAKE_TELESCOPE_PARKING_HORIZONTAL,
     }
 }

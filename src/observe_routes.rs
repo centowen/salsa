@@ -185,10 +185,7 @@ async fn observe(telescope: TelescopeHandle) -> Result<String, TelescopeError> {
             longitude.to_degrees().to_string(),
             latitude.to_degrees().to_string(),
         ),
-        TelescopeTarget::Horizontal {
-            azimuth,
-            elevation,
-        } => (
+        TelescopeTarget::Horizontal { azimuth, elevation } => (
             azimuth.to_degrees().to_string(),
             elevation.to_degrees().to_string(),
         ),

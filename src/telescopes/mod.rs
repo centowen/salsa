@@ -15,8 +15,8 @@ pub enum TelescopeTarget {
         latitude: f64,  // in radians
     },
     Horizontal {
-        azimuth: f64, // in radians
-        elevation: f64,  // in radians
+        azimuth: f64,   // in radians
+        elevation: f64, // in radians
     },
     Parked, // aka Stow
 }
