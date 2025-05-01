@@ -1,4 +1,13 @@
 <div class="section light" id="bookings-container">
+  <h2>My bookings</h2>
+  <div class="bookings">
+    {% for booking in my_bookings %}
+    <div>
+      {{ booking.start_time.naive_local() }}: {{ booking.telescope_name }}
+      booked by {{ booking.user_name }}
+    </div>
+    {% endfor %}
+  </div>
   <h2>Bookings</h2>
   <div class="bookings">
     {% for booking in bookings %}

@@ -20,6 +20,7 @@ pub fn routes(database: DataBase<impl Storage + 'static>) -> Router {
 #[derive(Template)]
 #[template(path = "bookings.html")]
 struct BookingsTemplate {
+    my_bookings: Vec<Booking>,
     bookings: Vec<Booking>,
     telescope_names: Vec<String>,
 }
@@ -37,12 +38,18 @@ where
         .await
         .expect("As long as no one is manually editing the database, this should never fail.");
     let bookings = data_model.bookings;
+    let my_bookings = bookings
+        .iter()
+        .filter(|b| b.user_name == user.name)
+        .cloned()
+        .collect();
     let telescope_names: Vec<String> = data_model
         .telescopes
         .iter()
         .map(|t| t.name.clone())
         .collect();
     let content = BookingsTemplate {
+        my_bookings,
         bookings,
         telescope_names,
     }
@@ -66,6 +73,7 @@ struct BookingForm {
 }
 
 async fn create_booking<StorageType>(
+    Extension(user): Extension<User>,
     State(db): State<DataBase<StorageType>>,
     Form(booking_form): Form<BookingForm>,
 ) -> impl IntoResponse
@@ -112,6 +120,11 @@ where
         .await
         .expect("As long as no one is manually editing the database, this should never fail.");
     let bookings = data_model.bookings;
+    let my_bookings = bookings
+        .iter()
+        .filter(|b| b.user_name == user.name)
+        .cloned()
+        .collect();
     let telescope_names: Vec<String> = data_model
         .telescopes
         .iter()
@@ -119,6 +132,7 @@ where
         .collect();
 
     HtmlTemplate(BookingsTemplate {
+        my_bookings,
         bookings,
         telescope_names,
     })
