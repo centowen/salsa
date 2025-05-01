@@ -65,7 +65,6 @@ where
 
 #[derive(Deserialize, Debug)]
 struct BookingForm {
-    name: String,
     start_date: NaiveDate,
     start_time: NaiveTime,
     telescope: String,
@@ -87,7 +86,7 @@ where
     let booking = Booking {
         start_time,
         end_time,
-        user_name: booking_form.name,
+        user_name: user.name.clone(),
         telescope_name: booking_form.telescope,
     };
     let mut skip = false;
