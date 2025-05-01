@@ -14,8 +14,11 @@ pub enum TelescopeTarget {
         longitude: f64, // in radians
         latitude: f64,  // in radians
     },
-    Parked,
-    Stopped,
+    Horizontal {
+        azimuth: f64, // in radians
+        elevation: f64,  // in radians
+    },
+    Parked, // aka Stow
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Debug, Copy, Clone)]
@@ -70,7 +73,7 @@ pub struct TelescopeDefinition {
     pub name: String,
     pub enabled: bool,
     pub location: Location,
-    pub min_altitude: f64,
+    pub min_elevation: f64,
     pub telescope_type: TelescopeType,
 }
 

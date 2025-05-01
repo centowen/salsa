@@ -7,7 +7,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::time::{Instant, sleep_until};
 
-pub const LOWEST_ALLOWED_ALTITUDE: f64 = 5.0f64 / 180.0f64 * std::f64::consts::PI;
+pub const LOWEST_ALLOWED_ELEVATION: f64 = 5.0f64 / 180.0f64 * std::f64::consts::PI;
 
 pub struct TelescopeTrackerInfo {
     pub target: TelescopeTarget,
@@ -25,7 +25,11 @@ pub struct TelescopeTracker {
 impl TelescopeTracker {
     pub fn new(controller_address: String) -> TelescopeTracker {
         let state = Arc::new(Mutex::new(TelescopeTrackerState {
-            target: TelescopeTarget::Stopped,
+            // TODO: This should be configurable, probably per telescope
+            target: TelescopeTarget::Galactic{
+                longitude: 140_f64.to_radians(),
+                latitude: 0.0,
+            },
             commanded_horizontal: None,
             current_direction: None,
             most_recent_error: None,
@@ -163,7 +167,7 @@ fn update_direction(
     match target_horizontal {
         Some(target_horizontal) => {
             // FIXME: How to handle static configuration like this?
-            if target_horizontal.altitude < LOWEST_ALLOWED_ALTITUDE {
+            if target_horizontal.elevation < LOWEST_ALLOWED_ELEVATION {
                 state.most_recent_error = Some(TelescopeError::TargetBelowHorizon);
                 state.commanded_horizontal = None;
                 return Err(TelescopeError::TargetBelowHorizon);
@@ -202,7 +206,10 @@ fn calculate_target_horizontal(
             longitude: l,
             latitude: b,
         } => Some(horizontal_from_galactic(location, when, l, b)),
-        TelescopeTarget::Stopped => None,
+        TelescopeTarget::Horizontal {
+            azimuth: az,
+            elevation: el,
+        } => Some(Direction{ azimuth: az, elevation: el }),
         TelescopeTarget::Parked => None,
     }
 }
@@ -214,5 +221,5 @@ fn directions_are_close(a: Direction, b: Direction, tol: f64) -> bool {
     // status between tracking/slewing (e.g. due to control unit rounding errors)
     // Therefore we have the "tol" multiplier here, which scales the allowed error.
     let epsilon = tol * 0.1_f64.to_radians();
-    (a.azimuth - b.azimuth).abs() < epsilon && (a.altitude - b.altitude).abs() < epsilon
+    (a.azimuth - b.azimuth).abs() < epsilon && (a.elevation - b.elevation).abs() < epsilon
 }

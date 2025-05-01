@@ -14,9 +14,9 @@ use std::time::Duration;
 
 const FAKE_TELESCOPE_PARKING_HORIZONTAL: Direction = Direction {
     azimuth: 0.0,
-    altitude: PI / 2.0,
+    elevation: PI / 2.0,
 };
-pub const LOWEST_ALLOWED_ALTITUDE: f64 = 5.0 / 180. * PI;
+pub const LOWEST_ALLOWED_ELEVATION: f64 = 5.0 / 180. * PI;
 
 pub const FAKE_TELESCOPE_SLEWING_SPEED: f64 = PI / 10.0;
 pub const FAKE_TELESCOPE_CHANNELS: usize = 400;
@@ -69,14 +69,13 @@ impl Telescope for FakeTelescope {
         self.current_spectra.clear();
 
         let target_horizontal =
-            calculate_target_horizontal(self.location, Utc::now(), target, self.horizontal);
-        if target_horizontal.altitude < LOWEST_ALLOWED_ALTITUDE {
+            calculate_target_horizontal(self.location, Utc::now(), target);
+        if target_horizontal.elevation < LOWEST_ALLOWED_ELEVATION {
             log::info!(
                 "Refusing to set target for telescope {} to {:?}. Target is below horizon",
                 &self.name,
                 &target
             );
-            self.target = TelescopeTarget::Stopped;
             Err(TelescopeError::TargetBelowHorizon)
         } else {
             log::info!(
@@ -105,15 +104,13 @@ impl Telescope for FakeTelescope {
 
     async fn get_info(&self) -> Result<TelescopeInfo, TelescopeError> {
         let target_horizontal =
-            calculate_target_horizontal(self.location, Utc::now(), self.target, self.horizontal);
+            calculate_target_horizontal(self.location, Utc::now(), self.target);
 
         let horizontal_offset_squared = (target_horizontal.azimuth - self.horizontal.azimuth)
             .powi(2)
-            + (target_horizontal.altitude - self.horizontal.altitude).powi(2);
+            + (target_horizontal.elevation - self.horizontal.elevation).powi(2);
         let status = {
-            if self.target == TelescopeTarget::Stopped {
-                TelescopeStatus::Idle
-            } else if horizontal_offset_squared > 0.2f64.to_radians().powi(2) {
+            if horizontal_offset_squared > 0.2f64.to_radians().powi(2) {
                 TelescopeStatus::Slewing
             } else if self.target == TelescopeTarget::Parked {
                 TelescopeStatus::Idle
@@ -163,10 +160,9 @@ impl Telescope for FakeTelescope {
         let now = Utc::now();
         let current_horizontal = self.horizontal;
         let target_horizontal =
-            calculate_target_horizontal(self.location, now, self.target, current_horizontal);
+            calculate_target_horizontal(self.location, now, self.target);
 
-        if target_horizontal.altitude < LOWEST_ALLOWED_ALTITUDE {
-            self.target = TelescopeTarget::Stopped;
+        if target_horizontal.elevation < LOWEST_ALLOWED_ELEVATION {
             log::info!(
                 "Stopping telescope since target {:?} set below horizon.",
                 &self.target
@@ -176,7 +172,7 @@ impl Telescope for FakeTelescope {
             let max_delta_angle = FAKE_TELESCOPE_SLEWING_SPEED * delta_time.as_secs_f64();
             self.horizontal.azimuth += (target_horizontal.azimuth - current_horizontal.azimuth)
                 .clamp(-max_delta_angle, max_delta_angle);
-            self.horizontal.altitude += (target_horizontal.altitude - current_horizontal.altitude)
+            self.horizontal.elevation += (target_horizontal.elevation - current_horizontal.elevation)
                 .clamp(-max_delta_angle, max_delta_angle);
         }
 
@@ -220,7 +216,6 @@ fn calculate_target_horizontal(
     location: Location,
     when: DateTime<Utc>,
     target: TelescopeTarget,
-    current_horizontal: Direction,
 ) -> Direction {
     match target {
         TelescopeTarget::Equatorial {
@@ -231,7 +226,10 @@ fn calculate_target_horizontal(
             longitude: l,
             latitude: b,
         } => horizontal_from_galactic(location, when, l, b),
-        TelescopeTarget::Stopped => current_horizontal,
+        TelescopeTarget::Horizontal {
+            azimuth: az,
+            elevation: el,
+        } => Direction{ azimuth: az, elevation: el },
         TelescopeTarget::Parked => FAKE_TELESCOPE_PARKING_HORIZONTAL,
     }
 }
