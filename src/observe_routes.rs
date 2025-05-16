@@ -1,4 +1,6 @@
 use crate::authentication::User;
+use crate::bookings::Booking;
+use crate::database::{DataBase, Storage};
 use crate::index::render_main;
 use crate::telescope::{TelescopeCollectionHandle, TelescopeHandle};
 use crate::telescope_routes::state;
@@ -15,15 +17,28 @@ use axum::{
     Router,
     routing::{get, post},
 };
+use chrono::Utc;
 use serde::Deserialize;
 
-pub fn routes(telescopes: TelescopeCollectionHandle) -> Router {
+#[derive(Clone)]
+struct ObserveState<StorageType: Storage> {
+    telescopes: TelescopeCollectionHandle,
+    database: DataBase<StorageType>,
+}
+
+pub fn routes(
+    telescopes: TelescopeCollectionHandle,
+    database: DataBase<impl Storage + 'static>,
+) -> Router {
     let observe_routes = Router::new()
         .route("/", get(get_observe))
         .route("/", post(post_observe));
     Router::new()
         .nest("/{telescope_id}", observe_routes)
-        .with_state(telescopes)
+        .with_state(ObserveState {
+            telescopes,
+            database,
+        })
 }
 
 #[derive(Deserialize, Debug)]
@@ -87,11 +102,14 @@ fn error_response(message: String) -> Response {
         .expect("Building a response should never fail")
 }
 
-async fn post_observe(
-    State(telescopes): State<TelescopeCollectionHandle>,
+async fn post_observe<StorageType>(
+    State(state): State<ObserveState<StorageType>>,
     Path(telescope_id): Path<String>,
     Form(target): Form<Target>,
-) -> Result<impl IntoResponse, ObserveError> {
+) -> Result<impl IntoResponse, ObserveError>
+where
+    StorageType: Storage,
+{
     let x_rad = target.x.to_radians();
     let y_rad = target.y.to_radians();
     let target = match (target.action.as_str(), target.coordinate_system.as_str()) {
@@ -119,7 +137,8 @@ async fn post_observe(
         }
     };
 
-    let mut telescope = telescopes
+    let mut telescope = state
+        .telescopes
         .get(&telescope_id)
         .await
         .ok_or(ObserveError::TelescopeNotFound("fake".to_string()))?;
@@ -132,13 +151,47 @@ async fn post_observe(
     Ok(Html(content))
 }
 
-async fn get_observe(
+fn has_active_booking(user: &User, bookings: &[Booking]) -> bool {
+    let now = Utc::now();
+    for booking in bookings {
+        if booking.user_name != user.name {
+            continue;
+        }
+        if now > booking.start_time && now < booking.end_time {
+            return true;
+        }
+    }
+    false
+}
+
+async fn get_observe<StorageType>(
     Extension(user): Extension<User>,
-    State(telescopes): State<TelescopeCollectionHandle>,
+    State(state): State<ObserveState<StorageType>>,
     Path(telescope_id): Path<String>,
     headers: HeaderMap,
-) -> Result<impl IntoResponse, ObserveError> {
-    let telescope = telescopes
+) -> Result<impl IntoResponse, ObserveError>
+where
+    StorageType: Storage,
+{
+    let data_model = state
+        .database
+        .get_data()
+        .await
+        .expect("As long as no one is manually editing the database, this should never fail.");
+    let bookings = data_model.bookings;
+    if !has_active_booking(&user, &bookings) {
+        let content = DontObserveTemplate {}
+            .render()
+            .expect("Template rendering should always succeed");
+        let content = if headers.get("hx-request").is_some() {
+            content
+        } else {
+            render_main(user.name, content)
+        };
+        return Ok(Html(content));
+    }
+    let telescope = state
+        .telescopes
         .get(&telescope_id)
         .await
         .ok_or(ObserveError::TelescopeNotFound("fake".to_string()))?;
@@ -202,3 +255,7 @@ async fn observe(telescope: TelescopeHandle) -> Result<String, TelescopeError> {
     .render()
     .expect("Template rendering should always succeed"))
 }
+
+#[derive(Template)]
+#[template(path = "dont_observe.html", escape = "none")]
+struct DontObserveTemplate {}
