@@ -41,6 +41,7 @@ async fn spectrum_handle_upgrade(
         .ok_or(TelescopeNotFound)?;
     // WebSockets come in as a regular HTTP request, that connection is then
     // upgraded to a socket.
+    log::debug!("Setting up measurement websocket for {}", telescope_id);
     Ok(upgrade.on_upgrade(move |socket| spectrum_handle_websocket(socket, telescope)))
 }
 
