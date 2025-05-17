@@ -33,7 +33,23 @@
     ],
     "telescopes": [
         {
-            "name": "fake",
+            "name": "fake1",
+            "enabled": true,
+            "location": {
+                "longitude": 0.20802143022,
+                "latitude": 1.00170457462
+            },
+            "min_elevation": 0.087,
+            "telescope_type": {
+                "Fake": {
+                    "definition": {
+                        "slewing_speed": 0.314
+                    }
+                }
+            }
+        },
+        {
+            "name": "fake2",
             "enabled": true,
             "location": {
                 "longitude": 0.20802143022,
