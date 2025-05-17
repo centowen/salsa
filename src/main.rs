@@ -62,10 +62,6 @@ async fn main() {
         .route("/weather", get(weather::get_weather_info))
         .nest("/bookings", bookings::routes::routes(database.clone()))
         .nest("/telescope", telescope_routes::routes(telescopes.clone()))
-        .nest(
-            "/api/bookings",
-            bookings::api_routes::routes(database.clone()),
-        )
         .route_layer(middleware::from_fn(authenticate));
 
     let assets_path = "assets";
