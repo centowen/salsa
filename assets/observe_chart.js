@@ -1,3 +1,12 @@
+function get_telescope_from_location() {
+  const path_parts = window.location.pathname.split('/')
+  // Loop to one less to allow picking an item one ahead of i.
+  for (let i = 0; i < path_parts.length - 1; i++) {
+    if (path_parts[i] == "observe") return path_parts[i + 1];
+  }
+  throw Error("Failed to find a telescope from the URL path");
+}
+
 (function () {
   const width = 800;
   const height = 600;
@@ -56,7 +65,7 @@
   if (window.spectrumSocket) {
     window.spectrumSocket.close();
   }
-  window.spectrumSocket = new WebSocket("/telescope/fake/spectrum");
+  window.spectrumSocket = new WebSocket(`/telescope/${get_telescope_from_location()}/spectrum`);
   window.spectrumSocket.onmessage = async (event) => {
     let dataView = new DataView(await event.data.arrayBuffer());
     let data = [];
