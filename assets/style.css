@@ -226,3 +226,8 @@ footer {
 .calendar .other-month a {
     color: #999999;
 }
+
+a.action:link,
+a.action:visited {
+    color: #ce54c4;
+}
