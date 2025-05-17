@@ -22,8 +22,6 @@ impl Booking {
 pub enum AddBookingError {
     ServiceUnavailable,
     Conflict,
-    // NotFuture - booking is entirely(?) in the past
-    // NonPositiveDuration - booking ends before it starts
 }
 
 pub type AddBookingResult = Result<u64, AddBookingError>;
