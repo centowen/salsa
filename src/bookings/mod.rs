@@ -1,7 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-pub mod api_routes;
 pub mod routes;
 
 #[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
@@ -23,5 +22,3 @@ pub enum AddBookingError {
     ServiceUnavailable,
     Conflict,
 }
-
-pub type AddBookingResult = Result<u64, AddBookingError>;

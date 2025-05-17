@@ -16,7 +16,6 @@ mod index;
 mod observe_routes;
 mod salsa_telescope;
 mod telescope;
-mod telescope_api_routes;
 mod telescope_controller;
 mod telescope_routes;
 mod telescope_tracker;
@@ -63,11 +62,6 @@ async fn main() {
         .route("/weather", get(weather::get_weather_info))
         .nest("/bookings", bookings::routes::routes(database.clone()))
         .nest("/telescope", telescope_routes::routes(telescopes.clone()))
-        .nest("/api/telescopes", telescope_api_routes::routes(telescopes))
-        .nest(
-            "/api/bookings",
-            bookings::api_routes::routes(database.clone()),
-        )
         .route_layer(middleware::from_fn(authenticate));
 
     let assets_path = "assets";
