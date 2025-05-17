@@ -77,7 +77,7 @@
                 "Salsa": {
                     "definition": {
                         "controller_address": "192.168.5.10:23",
-                        "receiver_address": "192.168.5.31"
+                        "receiver_address": "192.168.5.30"
                     }
                 }
             }
@@ -111,7 +111,7 @@
                 "Salsa": {
                     "definition": {
                         "controller_address": "192.168.5.12:23",
-                        "receiver_address": "192.168.5.31"
+                        "receiver_address": "192.168.5.32"
                     }
                 }
             }
