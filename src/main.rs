@@ -1,4 +1,4 @@
-use authentication::authenticate;
+use authentication::extract_session;
 use axum::{Router, middleware, routing::get};
 use axum_server::tls_rustls::RustlsConfig;
 use clap::Parser;
@@ -55,6 +55,7 @@ async fn main() {
 
     let mut app = Router::new()
         .route("/", get(index::get_index))
+        .nest("/auth", authentication::routes())
         .nest(
             "/observe",
             observe_routes::routes(telescopes.clone(), database.clone()),
@@ -62,7 +63,7 @@ async fn main() {
         .route("/weather", get(weather::get_weather_info))
         .nest("/bookings", bookings::routes::routes(database.clone()))
         .nest("/telescope", telescope_routes::routes(telescopes.clone()))
-        .route_layer(middleware::from_fn(authenticate));
+        .route_layer(middleware::from_fn(extract_session));
 
     let assets_path = "assets";
     log::info!("serving asserts from {}", assets_path);
