@@ -3,3 +3,4 @@ target/
 
 /database.json
 /database.sqlite3
+/.secrets.toml

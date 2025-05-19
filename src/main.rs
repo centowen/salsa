@@ -1,10 +1,11 @@
-use authentication::authenticate;
+use authentication::extract_session;
 use axum::{Router, middleware, routing::get};
 use axum_server::tls_rustls::RustlsConfig;
 use clap::Parser;
 use database::{create_database_from_directory, create_sqlite_database_on_disk};
-use std::net::SocketAddr;
+use std::{net::SocketAddr, sync::Arc};
 use telescope::create_telescope_collection;
+use tokio::sync::Mutex;
 use tower_http::services::ServeDir;
 
 mod authentication;
@@ -44,8 +45,10 @@ async fn main() {
         .await
         .expect("failed to create database");
 
-    let _sqlite_database = create_sqlite_database_on_disk("database.sqlite3")
-        .expect("failed to create sqlite database");
+    let new_db = Arc::new(Mutex::new(
+        create_sqlite_database_on_disk("database.sqlite3")
+            .expect("failed to create sqlite database"),
+    ));
 
     let telescopes = create_telescope_collection(&database)
         .await
@@ -55,6 +58,7 @@ async fn main() {
 
     let mut app = Router::new()
         .route("/", get(index::get_index))
+        .nest("/auth", authentication::routes(new_db))
         .nest(
             "/observe",
             observe_routes::routes(telescopes.clone(), database.clone()),
@@ -62,7 +66,7 @@ async fn main() {
         .route("/weather", get(weather::get_weather_info))
         .nest("/bookings", bookings::routes::routes(database.clone()))
         .nest("/telescope", telescope_routes::routes(telescopes.clone()))
-        .route_layer(middleware::from_fn(authenticate));
+        .route_layer(middleware::from_fn(extract_session));
 
     let assets_path = "assets";
     log::info!("serving asserts from {}", assets_path);
