@@ -1,4 +1,4 @@
-use std::fs::read_to_string;
+use std::{fs::read_to_string, sync::Arc};
 
 use async_session::{MemoryStore, Session, SessionStore};
 use axum::{
@@ -17,15 +17,25 @@ use oauth2::{
         BasicTokenIntrospectionResponse, BasicTokenResponse,
     },
 };
+use rusqlite::{Connection, Result, params};
 use serde::Deserialize;
+use tokio::sync::Mutex;
 
-pub fn routes() -> Router {
+#[derive(Clone)]
+struct AuthenticationState {
+    client: DiscordClient,
+    database_connection: Arc<Mutex<Connection>>,
+    store: MemoryStore,
+}
+
+pub fn routes(database_connection: Arc<Mutex<Connection>>) -> Router {
     Router::new()
         .route("/authorized", get(authenticate_from_discord))
         .route("/discord", get(redirect_to_discord))
         .with_state(AuthenticationState {
-            store: MemoryStore::new(),
             client: create_oauth2_client(),
+            database_connection,
+            store: MemoryStore::new(),
         })
 }
 
@@ -88,12 +98,6 @@ fn create_oauth2_client() -> DiscordClient {
             TokenUrl::new("https://discord.com/api/oauth2/token".to_string())
                 .expect("Hardcoded URL should always work."),
         )
-}
-
-#[derive(Clone)]
-struct AuthenticationState {
-    store: MemoryStore,
-    client: DiscordClient,
 }
 
 struct Error {}
@@ -187,7 +191,12 @@ async fn authenticate_from_discord(
         .await
         .unwrap();
 
-    // TODO: Set up our user state and session. Ask the user for a display name.
+    let conn = state.database_connection.lock().await;
+    let _name_maybe = conn.query_row(
+        "select * from user where discord_id = (?1)",
+        (&user_data.id,),
+        |row| Ok(row.get::<usize, String>(1).unwrap()),
+    );
 
     Html(format!("{:?}", user_data))
 }

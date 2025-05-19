@@ -104,21 +104,19 @@ mod embedded {
     embed_migrations!("./sql_migrations");
 }
 
-pub fn apply_migrations(mut connection: Connection) -> Result<(), SqliteDatabaseError> {
-    let report = embedded::migrations::runner().run(&mut connection).unwrap();
+pub fn apply_migrations(connection: &mut Connection) -> Result<(), SqliteDatabaseError> {
+    let report = embedded::migrations::runner().run(connection).unwrap();
     debug!("Applied migrations\n{:?}", report);
     Ok(())
 }
 
 pub fn create_sqlite_database_on_disk(
     file_path: impl Into<PathBuf>,
-) -> Result<Pool, SqliteDatabaseError> {
+) -> Result<Connection, SqliteDatabaseError> {
     let file_path = file_path.into();
-    let connection = Connection::open(&file_path)?;
-    apply_migrations(connection)?;
-    let cfg = Config::new(file_path);
-    let pool = cfg.create_pool(Runtime::Tokio1)?;
-    Ok(pool)
+    let mut connection = Connection::open(&file_path)?;
+    apply_migrations(&mut connection)?;
+    Ok(connection)
 }
 
 /// Create an in-memory database.
