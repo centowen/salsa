@@ -56,10 +56,6 @@ impl Telescope for FakeTelescope {
         Ok(self.horizontal)
     }
 
-    async fn get_target(&self) -> Result<TelescopeTarget, TelescopeError> {
-        Ok(self.target)
-    }
-
     async fn set_target(
         &mut self,
         target: TelescopeTarget,
@@ -179,13 +175,6 @@ impl Telescope for FakeTelescope {
             self.current_spectra.push(create_fake_spectra(delta_time))
         }
 
-        Ok(())
-    }
-
-    async fn restart(&mut self) -> Result<(), TelescopeError> {
-        self.most_recent_error = None;
-        self.receiver_configuration.integrate = false;
-        self.current_spectra.clear();
         Ok(())
     }
 }

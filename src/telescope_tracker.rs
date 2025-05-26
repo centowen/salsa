@@ -48,6 +48,7 @@ impl TelescopeTracker {
         Ok(target)
     }
 
+    #[allow(dead_code)]
     pub fn restart(&self) {
         self.state.lock().unwrap().should_restart = true;
     }
@@ -89,6 +90,7 @@ impl TelescopeTracker {
         }
     }
 
+    #[allow(dead_code)]
     pub fn target(&self) -> Result<TelescopeTarget, TelescopeError> {
         Ok(self.state.lock().unwrap().target)
     }

@@ -16,7 +16,6 @@ pub const TELESCOPE_UPDATE_INTERVAL: Duration = Duration::from_secs(1);
 #[async_trait]
 pub trait Telescope: Send {
     async fn get_direction(&self) -> Result<Direction, TelescopeError>;
-    async fn get_target(&self) -> Result<TelescopeTarget, TelescopeError>;
     async fn set_target(
         &mut self,
         target: TelescopeTarget,
@@ -27,7 +26,6 @@ pub trait Telescope: Send {
     ) -> Result<ReceiverConfiguration, ReceiverError>;
     async fn get_info(&self) -> Result<TelescopeInfo, TelescopeError>;
     async fn update(&mut self, delta_time: Duration) -> Result<(), TelescopeError>;
-    async fn restart(&mut self) -> Result<(), TelescopeError>;
 }
 
 // Hide all synchronization for accessing a telescope inside this type only
@@ -44,10 +42,6 @@ impl TelescopeHandle {
     pub async fn get_direction(&self) -> Result<Direction, TelescopeError> {
         let guard = self.telescope.lock().await;
         guard.get_direction().await
-    }
-    pub async fn get_target(&self) -> Result<TelescopeTarget, TelescopeError> {
-        let guard = self.telescope.lock().await;
-        guard.get_target().await
     }
     pub async fn set_target(
         &mut self,
@@ -74,10 +68,6 @@ impl TelescopeHandle {
         let mut guard = self.telescope.lock().await;
         guard.update(delta_time).await
     }
-    pub async fn restart(&mut self) -> Result<(), TelescopeError> {
-        let mut guard = self.telescope.lock().await;
-        guard.restart().await
-    }
 }
 
 type TelescopeCollection = Arc<RwLock<HashMap<String, TelescopeHandle>>>;
@@ -94,14 +84,6 @@ impl TelescopeCollectionHandle {
     pub async fn get(&self, id: &str) -> Option<TelescopeHandle> {
         let telescopes_read_lock = self.telescopes.read().await;
         telescopes_read_lock.get(id).cloned()
-    }
-
-    pub async fn all(&self) -> Vec<(String, TelescopeHandle)> {
-        let telescopes_read_lock = self.telescopes.read().await;
-        telescopes_read_lock
-            .iter()
-            .map(|(name, t)| (name.clone(), t.clone()))
-            .collect()
     }
 }
 
