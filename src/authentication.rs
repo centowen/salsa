@@ -124,6 +124,7 @@ async fn redirect_to_discord(
         .client
         .authorize_url(CsrfToken::new_random)
         .add_scope(Scope::new("identify".to_string()))
+        .add_extra_param("prompt".to_string(), "none".to_string())
         .url();
 
     let mut session = Session::new();
