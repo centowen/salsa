@@ -165,7 +165,7 @@ struct DiscordUser {
 async fn authenticate_from_discord(
     Query(query): Query<AuthRequest>,
     State(state): State<AuthenticationState>,
-) -> impl IntoResponse {
+) -> Response {
     // FIXME: Validate CSRF token to ensure we originated the request in the first place.
 
     // 3. We use that code to request an authorization token from Discord.
@@ -192,13 +192,43 @@ async fn authenticate_from_discord(
         .unwrap();
 
     let conn = state.database_connection.lock().await;
-    let _name_maybe = conn.query_row(
+    let name_maybe = conn.query_row(
         "select * from user where discord_id = (?1)",
         (&user_data.id,),
         |row| Ok(row.get::<usize, String>(1).unwrap()),
     );
 
-    Html(format!("{:?}", user_data))
+    dbg!(&name_maybe);
+
+    if let Err(rusqlite::Error::QueryReturnedNoRows) = name_maybe {
+        // TODO: Wrap up this session stuff?
+        let mut session = Session::new();
+        session
+            .insert("discord_id", &user_data.id)
+            .expect("Data created entirely by us");
+        let cookie = state
+            .store
+            .store_session(session)
+            .await
+            .expect("Storing into memory store should never fail.")
+            .expect("Should always get a cookie.");
+        // KNARK: Is this the proper cookie format?
+        let cookie = format!("session={cookie}; SameSite=Lax; HttpOnly; Secure; Path=/");
+
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            SET_COOKIE,
+            cookie.parse().expect("Cookie should be parseable always."),
+        );
+        return (headers, Redirect::to(&"create_user".to_string())).into_response();
+    }
+
+    match name_maybe {
+        // FIXME: Proper redirect
+        Ok(name) => Html(format!("{:?}", user_data)).into_response(),
+        // KNARK: Error handling
+        Err(err) => panic!("Unexpected error: {err}"),
+    }
 }
 
 #[derive(Clone)]
