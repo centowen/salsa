@@ -51,10 +51,6 @@ impl Telescope for SalsaTelescope {
         self.controller.direction()
     }
 
-    async fn get_target(&self) -> Result<TelescopeTarget, TelescopeError> {
-        self.controller.target()
-    }
-
     async fn set_target(
         &mut self,
         target: TelescopeTarget,
@@ -137,11 +133,6 @@ impl Telescope for SalsaTelescope {
                 self.active_integration = Some(active_integration);
             }
         }
-        Ok(())
-    }
-
-    async fn restart(&mut self) -> Result<(), TelescopeError> {
-        self.controller.restart();
         Ok(())
     }
 }
