@@ -1,6 +1,6 @@
 
 <div class="section light">
-  <form hx-post="/auth/create_user" hx-target="#page">
+  <form hx-post="/auth/create_user" hx-target="body">
     <label for="username">Username</label>
     <input type="text" id="username" name="username" value="{{ username }}">
     <button type="submit">Create!</button>

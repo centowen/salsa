@@ -7,13 +7,13 @@ use axum::{
     extract::{Query, Request, State},
     http::{
         HeaderMap, StatusCode,
-        header::{COOKIE, SET_COOKIE},
+        header::{COOKIE, SET_COOKIE, ToStrError},
     },
     middleware::Next,
     response::{Html, IntoResponse, Redirect, Response},
     routing::{get, post},
 };
-use log::{debug, trace};
+use log::{debug, info};
 use oauth2::{
     AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken, EndpointNotSet, EndpointSet,
     RedirectUrl, Scope, StandardRevocableToken, TokenResponse, TokenUrl,
@@ -30,6 +30,7 @@ use crate::index::render_main;
 
 const SESSION: &str = "session";
 
+// TODO: Look over the states in this module.
 #[derive(Clone)]
 struct AuthenticationState {
     client: DiscordClient,
@@ -37,7 +38,36 @@ struct AuthenticationState {
     store: MemoryStore,
 }
 
-pub fn routes(database_connection: Arc<Mutex<Connection>>) -> Router {
+#[derive(Clone)]
+pub struct User {
+    pub name: String,
+}
+
+// TODO: Look over the states in this module.
+#[derive(Clone)]
+pub struct SessionState {
+    pub database_connection: Arc<Mutex<Connection>>,
+    pub store: MemoryStore,
+}
+
+pub async fn extract_session(
+    State(state): State<SessionState>,
+    mut request: Request,
+    next: Next,
+) -> Result<Response, StatusCode> {
+    debug!("Authenticating user session");
+    let session = get_user_session(request.headers(), &state.store).await;
+    dbg!(&session);
+    // TODO: Username should be fetched from db.
+    let username = session.and_then(|s| s.get("username"));
+    dbg!(&username);
+    request.extensions_mut().insert(User {
+        name: username.unwrap_or_else(|| "".to_string()),
+    });
+    Ok(next.run(request).await)
+}
+
+pub fn routes(database_connection: Arc<Mutex<Connection>>, store: MemoryStore) -> Router {
     Router::new()
         .route("/authorized", get(authenticate_from_discord))
         .route("/discord", get(redirect_to_discord))
@@ -46,7 +76,7 @@ pub fn routes(database_connection: Arc<Mutex<Connection>>) -> Router {
         .with_state(AuthenticationState {
             client: create_oauth2_client(),
             database_connection,
-            store: MemoryStore::new(),
+            store,
         })
 }
 
@@ -111,14 +141,6 @@ fn create_oauth2_client() -> DiscordClient {
         )
 }
 
-struct Error {}
-
-impl IntoResponse for Error {
-    fn into_response(self) -> Response {
-        todo!()
-    }
-}
-
 // Basic Oath2 flow
 //
 // 1. User is redirected to Discord.
@@ -156,7 +178,7 @@ async fn redirect_to_discord(
         cookie.parse().expect("Cookie should be parseable always."),
     );
 
-    debug!("Going out to discord");
+    info!("Sending user to Discord to authenticate");
 
     Ok((headers, Redirect::to(url.as_ref())))
 }
@@ -217,51 +239,49 @@ async fn authenticate_from_discord(
 
     dbg!(&name_maybe);
 
+    let cookie = state
+        .store
+        .store_session(Session::new())
+        .await
+        .expect("Storing into memory store should never fail.")
+        .expect("Should always get a cookie.");
+    // Need to get the session out of the store. Creating it outside and cloning it will mess
+    // with its id.
+    let mut session = state
+        .store
+        .load_session(cookie.clone())
+        .await
+        .expect("We just put this session in.")
+        .expect("really!");
+    let cookie = format!("{SESSION}={cookie}; SameSite=Lax; HttpOnly; Secure; Path=/");
+
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        SET_COOKIE,
+        cookie.parse().expect("Cookie should be parseable always."),
+    );
+
     if let Err(rusqlite::Error::QueryReturnedNoRows) = name_maybe {
-        // TODO: Wrap up this session stuff?
-        let mut session = Session::new();
+        info!("Redirecting to create new user");
         session
             .insert("discord_id", &user_data.id)
             .expect("MemoryStore should work every time");
         session
-            .insert("username", &user_data.username)
+            .insert("discord_username", &user_data.username)
             .expect("MemoryStore should work every time");
-        let cookie = state
-            .store
-            .store_session(session)
-            .await
-            .expect("Storing into memory store should never fail.")
-            .expect("Should always get a cookie.");
-        let cookie = format!("{SESSION}={cookie}; SameSite=Lax; HttpOnly; Secure; Path=/");
-
-        let mut headers = HeaderMap::new();
-        headers.insert(
-            SET_COOKIE,
-            cookie.parse().expect("Cookie should be parseable always."),
-        );
-        return (headers, Redirect::to(&"create_user".to_string())).into_response();
+        return (headers, Redirect::to("create_user")).into_response();
     }
 
     match name_maybe {
-        // FIXME: Proper redirect
-        Ok(name) => Html(format!("{:?}", user_data)).into_response(),
-        // KNARK: Error handling
+        Ok(name) => {
+            info!("Logging in existing user");
+            // TODO: This should be just fetched from the user table based on the id instead.
+            session.insert("username", name.clone()).unwrap();
+            (headers, Redirect::to("/")).into_response()
+        }
+        // Something went horribly wrong!
         Err(err) => panic!("Unexpected error: {err}"),
     }
-}
-
-#[derive(Clone)]
-pub struct User {
-    pub name: String,
-}
-
-// TODO: Can be made into extractor only I think?
-pub async fn extract_session(mut request: Request, next: Next) -> Result<Response, StatusCode> {
-    // TODO: Insert real authentication here.
-    request.extensions_mut().insert(User {
-        name: String::from("frood"),
-    });
-    Ok(next.run(request).await)
 }
 
 #[derive(Template)]
@@ -270,10 +290,12 @@ struct DisplayUser {
     username: String,
 }
 
-async fn get_user_session(headers: &HeaderMap, store: &MemoryStore) -> Session {
-    let cookie = headers.get(COOKIE).unwrap().to_str().unwrap();
+async fn get_user_session(headers: &HeaderMap, store: &MemoryStore) -> Option<Session> {
+    let cookie = match headers.get(COOKIE)?.to_str() {
+        Ok(cookie) => cookie,
+        Err(_) => return None,
+    };
     // parse coookie
-    dbg!(cookie);
     let kv_pairs = cookie.split(";");
     let session_id = kv_pairs
         .map(|kv_string| {
@@ -283,16 +305,15 @@ async fn get_user_session(headers: &HeaderMap, store: &MemoryStore) -> Session {
         .find_map(|(key, value)| match key {
             SESSION => Some(value),
             _ => None,
-        })
-        .unwrap();
+        })?;
 
     dbg!(session_id);
 
-    let session = store
-        .load_session(session_id.to_string())
-        .await
-        .unwrap()
-        .unwrap();
+    let session = match store.load_session(session_id.to_string()).await {
+        Ok(session) => session,
+        // TODO: Clear the cookie here
+        Err(_) => return None,
+    };
 
     println!("Fetched session from cookie");
     dbg!(&session);
@@ -303,9 +324,9 @@ async fn get_user(
     headers: HeaderMap,
     State(state): State<AuthenticationState>,
 ) -> impl IntoResponse {
-    let session = get_user_session(&headers, &state.store).await;
+    let session = get_user_session(&headers, &state.store).await.unwrap();
     let content = DisplayUser {
-        username: session.get("username").unwrap(),
+        username: session.get("discord_username").unwrap(),
     }
     .render()
     .expect("Template rendering should always succeed");
@@ -333,26 +354,41 @@ async fn post_user(
     Form(user_form): Form<UserForm>,
 ) -> impl IntoResponse {
     dbg!(&user_form);
-    let session = get_user_session(&headers, &state.store).await;
+    let mut session = get_user_session(&headers, &state.store).await.unwrap();
     let discord_id: String = session.get("discord_id").unwrap();
+    let username = user_form.username;
     let conn = state.database_connection.lock().await;
     conn.execute(
         "insert into user (username, discord_id) values ((?1), (?2))",
-        (&user_form.username, &discord_id),
+        (&username, &discord_id),
     )
     .unwrap();
 
+    session.insert("username", username.clone()).unwrap();
+
+    dbg!(session);
+
     let content = WelcomeUser {
-        username: user_form.username,
+        username: username.clone(),
     }
     .render()
     .expect("Template rendering should always succeed");
-    let content = if headers.get("hx-request").is_some() {
-        content
-    } else {
-        render_main("".to_string(), content)
-    };
-    Html(content)
+    // Always redraw everything to update log in state.
+    Html(render_main(username, content))
+}
+
+struct Error {}
+
+impl From<ToStrError> for Error {
+    fn from(_: ToStrError) -> Self {
+        return Error {};
+    }
+}
+
+impl IntoResponse for Error {
+    fn into_response(self) -> Response {
+        StatusCode::FORBIDDEN.into_response()
+    }
 }
 
 // OAuth2 based authentication

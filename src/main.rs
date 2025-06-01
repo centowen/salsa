@@ -1,4 +1,5 @@
-use authentication::extract_session;
+use async_session::MemoryStore;
+use authentication::{SessionState, extract_session};
 use axum::{Router, middleware, routing::get};
 use axum_server::tls_rustls::RustlsConfig;
 use clap::Parser;
@@ -46,7 +47,7 @@ async fn main() {
         .await
         .expect("failed to create database");
 
-    let new_db = Arc::new(Mutex::new(
+    let database_connection = Arc::new(Mutex::new(
         create_sqlite_database_on_disk("database.sqlite3")
             .expect("failed to create sqlite database"),
     ));
@@ -57,9 +58,14 @@ async fn main() {
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
 
+    let store = MemoryStore::new();
+
     let mut app = Router::new()
         .route("/", get(index::get_index))
-        .nest("/auth", authentication::routes(new_db))
+        .nest(
+            "/auth",
+            authentication::routes(database_connection.clone(), store.clone()),
+        )
         .nest(
             "/observe",
             observe_routes::routes(telescopes.clone(), database.clone()),
@@ -68,7 +74,13 @@ async fn main() {
         .nest("/bookings", bookings::routes::routes(database.clone()))
         .nest("/telescope", telescope_routes::routes(telescopes.clone()))
         .layer(TraceLayer::new_for_http())
-        .route_layer(middleware::from_fn(extract_session));
+        .route_layer(middleware::from_fn_with_state(
+            SessionState {
+                database_connection,
+                store,
+            },
+            extract_session,
+        ));
 
     let assets_path = "assets";
     log::info!("serving asserts from {}", assets_path);
