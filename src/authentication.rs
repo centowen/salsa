@@ -265,7 +265,7 @@ async fn create_user(
     let kv_pairs = cookie.split(";");
     let session_id = kv_pairs
         .map(|kv_string| {
-            let mut kv = kv_string.split("=");
+            let mut kv = kv_string.splitn(2, "=");
             (kv.next().unwrap(), kv.next().unwrap())
         })
         .find_map(|(key, value)| match key {
@@ -273,6 +273,8 @@ async fn create_user(
             _ => None,
         })
         .unwrap();
+
+    dbg!(session_id);
 
     let session = state
         .store
