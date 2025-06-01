@@ -1,10 +1,14 @@
 use std::{fs::read_to_string, str, sync::Arc};
 
+use askama::Template;
 use async_session::{MemoryStore, Session, SessionStore};
 use axum::{
-    Router,
+    Form, Router,
     extract::{Query, Request, State},
-    http::{HeaderMap, StatusCode, header::COOKIE, header::SET_COOKIE},
+    http::{
+        HeaderMap, StatusCode,
+        header::{COOKIE, SET_COOKIE},
+    },
     middleware::Next,
     response::{Html, IntoResponse, Redirect, Response},
     routing::{get, post},
@@ -22,6 +26,8 @@ use rusqlite::{Connection, Result};
 use serde::Deserialize;
 use tokio::sync::Mutex;
 
+use crate::index::render_main;
+
 const SESSION: &str = "session";
 
 #[derive(Clone)]
@@ -35,8 +41,8 @@ pub fn routes(database_connection: Arc<Mutex<Connection>>) -> Router {
     Router::new()
         .route("/authorized", get(authenticate_from_discord))
         .route("/discord", get(redirect_to_discord))
-        .route("/create_user", get(create_user))
-        .route("/create_user", post(create_user))
+        .route("/create_user", get(get_user))
+        .route("/create_user", post(post_user))
         .with_state(AuthenticationState {
             client: create_oauth2_client(),
             database_connection,
@@ -216,7 +222,10 @@ async fn authenticate_from_discord(
         let mut session = Session::new();
         session
             .insert("discord_id", &user_data.id)
-            .expect("Data created entirely by us");
+            .expect("MemoryStore should work every time");
+        session
+            .insert("username", &user_data.username)
+            .expect("MemoryStore should work every time");
         let cookie = state
             .store
             .store_session(session)
@@ -255,10 +264,13 @@ pub async fn extract_session(mut request: Request, next: Next) -> Result<Respons
     Ok(next.run(request).await)
 }
 
-async fn create_user(
-    headers: HeaderMap,
-    State(state): State<AuthenticationState>,
-) -> impl IntoResponse {
+#[derive(Template)]
+#[template(path = "create_user.html")]
+struct DisplayUser {
+    username: String,
+}
+
+async fn get_user_session(headers: &HeaderMap, store: &MemoryStore) -> Session {
     let cookie = headers.get(COOKIE).unwrap().to_str().unwrap();
     // parse coookie
     dbg!(cookie);
@@ -276,14 +288,56 @@ async fn create_user(
 
     dbg!(session_id);
 
-    let session = state
-        .store
+    let session = store
         .load_session(session_id.to_string())
         .await
+        .unwrap()
         .unwrap();
 
     println!("Fetched session from cookie");
-    // dbg!(session);
+    dbg!(&session);
+    session
+}
+
+async fn get_user(
+    headers: HeaderMap,
+    State(state): State<AuthenticationState>,
+) -> impl IntoResponse {
+    let session = get_user_session(&headers, &state.store).await;
+    let content = DisplayUser {
+        username: session.get("username").unwrap(),
+    }
+    .render()
+    .expect("Template rendering should always succeed");
+    let content = if headers.get("hx-request").is_some() {
+        content
+    } else {
+        render_main("".to_string(), content)
+    };
+    Html(content)
+}
+
+#[derive(Deserialize, Debug)]
+struct UserForm {
+    username: String,
+}
+
+async fn post_user(
+    headers: HeaderMap,
+    State(state): State<AuthenticationState>,
+    Form(user_form): Form<UserForm>,
+) -> impl IntoResponse {
+    dbg!(&user_form);
+    let session = get_user_session(&headers, &state.store).await;
+    let discord_id: String = session.get("discord_id").unwrap();
+    let conn = state.database_connection.lock().await;
+    conn.execute(
+        "insert into user (username, discord_id) values ((?1), (?2))",
+        (&user_form.username, &discord_id),
+    )
+    .unwrap();
+
+    Html("Win".to_string())
 }
 
 // OAuth2 based authentication

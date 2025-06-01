@@ -7,6 +7,7 @@ use std::{net::SocketAddr, sync::Arc};
 use telescope::create_telescope_collection;
 use tokio::sync::Mutex;
 use tower_http::services::ServeDir;
+use tower_http::trace::TraceLayer;
 
 mod authentication;
 mod bookings;
@@ -66,6 +67,7 @@ async fn main() {
         .route("/weather", get(weather::get_weather_info))
         .nest("/bookings", bookings::routes::routes(database.clone()))
         .nest("/telescope", telescope_routes::routes(telescopes.clone()))
+        .layer(TraceLayer::new_for_http())
         .route_layer(middleware::from_fn(extract_session));
 
     let assets_path = "assets";
