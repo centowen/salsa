@@ -1,14 +1,15 @@
-use std::{fs::read_to_string, sync::Arc};
+use std::{fs::read_to_string, str, sync::Arc};
 
 use async_session::{MemoryStore, Session, SessionStore};
 use axum::{
     Router,
     extract::{Query, Request, State},
-    http::{HeaderMap, StatusCode, header::SET_COOKIE},
+    http::{HeaderMap, StatusCode, header::COOKIE, header::SET_COOKIE},
     middleware::Next,
     response::{Html, IntoResponse, Redirect, Response},
-    routing::get,
+    routing::{get, post},
 };
+use log::{debug, trace};
 use oauth2::{
     AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken, EndpointNotSet, EndpointSet,
     RedirectUrl, Scope, StandardRevocableToken, TokenResponse, TokenUrl,
@@ -17,9 +18,11 @@ use oauth2::{
         BasicTokenIntrospectionResponse, BasicTokenResponse,
     },
 };
-use rusqlite::{Connection, Result, params};
+use rusqlite::{Connection, Result};
 use serde::Deserialize;
 use tokio::sync::Mutex;
+
+const SESSION: &str = "session";
 
 #[derive(Clone)]
 struct AuthenticationState {
@@ -32,6 +35,8 @@ pub fn routes(database_connection: Arc<Mutex<Connection>>) -> Router {
     Router::new()
         .route("/authorized", get(authenticate_from_discord))
         .route("/discord", get(redirect_to_discord))
+        .route("/create_user", get(create_user))
+        .route("/create_user", post(create_user))
         .with_state(AuthenticationState {
             client: create_oauth2_client(),
             database_connection,
@@ -137,13 +142,15 @@ async fn redirect_to_discord(
         .await
         .expect("Storing into memory store should never fail.")
         .expect("Should always get a cookie.");
-    let cookie = format!("session={cookie}; SameSite=Lax; HttpOnly; Secure; Path=/");
+    let cookie = format!("{SESSION}={cookie}; SameSite=Lax; HttpOnly; Secure; Path=/");
 
     let mut headers = HeaderMap::new();
     headers.insert(
         SET_COOKIE,
         cookie.parse().expect("Cookie should be parseable always."),
     );
+
+    debug!("Going out to discord");
 
     Ok((headers, Redirect::to(url.as_ref())))
 }
@@ -167,6 +174,7 @@ async fn authenticate_from_discord(
     Query(query): Query<AuthRequest>,
     State(state): State<AuthenticationState>,
 ) -> Response {
+    debug!("Coming back from discord");
     // FIXME: Validate CSRF token to ensure we originated the request in the first place.
 
     // 3. We use that code to request an authorization token from Discord.
@@ -180,6 +188,8 @@ async fn authenticate_from_discord(
         .request_async(&http_client)
         .await
         .unwrap();
+
+    debug!("Code authenticated");
 
     // 4. We use the token to get the identity of the user from Discord.
     let user_data: DiscordUser = http_client
@@ -213,8 +223,7 @@ async fn authenticate_from_discord(
             .await
             .expect("Storing into memory store should never fail.")
             .expect("Should always get a cookie.");
-        // KNARK: Is this the proper cookie format?
-        let cookie = format!("session={cookie}; SameSite=Lax; HttpOnly; Secure; Path=/");
+        let cookie = format!("{SESSION}={cookie}; SameSite=Lax; HttpOnly; Secure; Path=/");
 
         let mut headers = HeaderMap::new();
         headers.insert(
@@ -244,6 +253,35 @@ pub async fn extract_session(mut request: Request, next: Next) -> Result<Respons
         name: String::from("frood"),
     });
     Ok(next.run(request).await)
+}
+
+async fn create_user(
+    headers: HeaderMap,
+    State(state): State<AuthenticationState>,
+) -> impl IntoResponse {
+    let cookie = headers.get(COOKIE).unwrap().to_str().unwrap();
+    // parse coookie
+    dbg!(cookie);
+    let kv_pairs = cookie.split(";");
+    let session_id = kv_pairs
+        .map(|kv_string| {
+            let mut kv = kv_string.split("=");
+            (kv.next().unwrap(), kv.next().unwrap())
+        })
+        .find_map(|(key, value)| match key {
+            SESSION => Some(value),
+            _ => None,
+        })
+        .unwrap();
+
+    let session = state
+        .store
+        .load_session(session_id.to_string())
+        .await
+        .unwrap();
+
+    println!("Fetched session from cookie");
+    // dbg!(session);
 }
 
 // OAuth2 based authentication
