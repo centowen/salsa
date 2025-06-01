@@ -322,6 +322,11 @@ struct UserForm {
     username: String,
 }
 
+#[derive(Template)]
+#[template(path = "welcome_user.html")]
+struct WelcomeUser {
+    username: String,
+}
 async fn post_user(
     headers: HeaderMap,
     State(state): State<AuthenticationState>,
@@ -337,7 +342,17 @@ async fn post_user(
     )
     .unwrap();
 
-    Html("Win".to_string())
+    let content = WelcomeUser {
+        username: user_form.username,
+    }
+    .render()
+    .expect("Template rendering should always succeed");
+    let content = if headers.get("hx-request").is_some() {
+        content
+    } else {
+        render_main("".to_string(), content)
+    };
+    Html(content)
 }
 
 // OAuth2 based authentication
