@@ -30,20 +30,11 @@ use crate::index::render_main;
 
 const SESSION: &str = "session";
 
-// TODO: Look over the states in this module.
-#[derive(Clone)]
-struct AuthenticationState {
-    client: DiscordClient,
-    database_connection: Arc<Mutex<Connection>>,
-    store: MemoryStore,
-}
-
 #[derive(Clone)]
 pub struct User {
     pub name: String,
 }
 
-// TODO: Look over the states in this module.
 #[derive(Clone)]
 pub struct SessionState {
     pub database_connection: Arc<Mutex<Connection>>,
@@ -73,8 +64,7 @@ pub fn routes(database_connection: Arc<Mutex<Connection>>, store: MemoryStore) -
         .route("/discord", get(redirect_to_discord))
         .route("/create_user", get(get_user))
         .route("/create_user", post(post_user))
-        .with_state(AuthenticationState {
-            client: create_oauth2_client(),
+        .with_state(SessionState {
             database_connection,
             store,
         })
@@ -120,6 +110,7 @@ fn read_discord_secrets() -> ClientSecrets {
 }
 
 fn create_oauth2_client() -> DiscordClient {
+    // TODO: Don't read the secrets from disc all the time probably...
     let ClientSecrets {
         client_id,
         client_secret,
@@ -150,11 +141,11 @@ fn create_oauth2_client() -> DiscordClient {
 
 // 1. We redirect the user to Discord where they authorize our app.
 async fn redirect_to_discord(
-    State(state): State<AuthenticationState>,
+    State(state): State<SessionState>,
 ) -> Result<impl IntoResponse, Error> {
     // To know that we're the originator of the request when the user comes back from Discord
-    let (url, token) = state
-        .client
+    let client = create_oauth2_client();
+    let (url, token) = client
         .authorize_url(CsrfToken::new_random)
         .add_scope(Scope::new("identify".to_string()))
         .add_extra_param("prompt".to_string(), "none".to_string())
@@ -200,7 +191,7 @@ struct DiscordUser {
 // 2. User comes back with an authorization code.
 async fn authenticate_from_discord(
     Query(query): Query<AuthRequest>,
-    State(state): State<AuthenticationState>,
+    State(state): State<SessionState>,
 ) -> Response {
     debug!("Coming back from discord");
     // FIXME: Validate CSRF token to ensure we originated the request in the first place.
@@ -210,8 +201,8 @@ async fn authenticate_from_discord(
         .redirect(reqwest::redirect::Policy::none())
         .build()
         .expect("Hardcoded client should always build.");
-    let token = state
-        .client
+    let client = create_oauth2_client();
+    let token = client
         .exchange_code(AuthorizationCode::new(query.code.clone()))
         .request_async(&http_client)
         .await
@@ -322,7 +313,7 @@ async fn get_user_session(headers: &HeaderMap, store: &MemoryStore) -> Option<Se
 
 async fn get_user(
     headers: HeaderMap,
-    State(state): State<AuthenticationState>,
+    State(state): State<SessionState>,
 ) -> impl IntoResponse {
     let session = get_user_session(&headers, &state.store).await.unwrap();
     let content = DisplayUser {
@@ -350,7 +341,7 @@ struct WelcomeUser {
 }
 async fn post_user(
     headers: HeaderMap,
-    State(state): State<AuthenticationState>,
+    State(state): State<SessionState>,
     Form(user_form): Form<UserForm>,
 ) -> impl IntoResponse {
     dbg!(&user_form);
