@@ -212,15 +212,15 @@ async fn authenticate_from_discord(
         .exchange_code(AuthorizationCode::new(query.code.clone()))
         .request_async(&http_client)
         .await
-        {
-            Ok(token) => token,
-            Err(err) => {
-                debug!("Failed to get token from Discord: {err}");
-                // This realistically happens because of an old or bogus request
-                // to this endpoint. Returning 401 is reasonable.
-                return Ok(StatusCode::UNAUTHORIZED.into_response());
-            }
-        };
+    {
+        Ok(token) => token,
+        Err(err) => {
+            debug!("Failed to get token from Discord: {err}");
+            // This realistically happens because of an old or bogus request
+            // to this endpoint. Returning 401 is reasonable.
+            return Ok(StatusCode::UNAUTHORIZED.into_response());
+        }
+    };
 
     debug!("Code authenticated");
 
@@ -338,9 +338,9 @@ async fn get_user(
         None => return Ok(StatusCode::UNAUTHORIZED.into_response()),
     };
     let content = DisplayUser {
-        username: session
-            .get("discord_username")
-            .ok_or_else(|| InternalError::new(format!("Failed to get Discord username from session")))?,
+        username: session.get("discord_username").ok_or_else(|| {
+            InternalError::new(format!("Failed to get Discord username from session"))
+        })?,
     }
     .render()
     .expect("Template rendering should always succeed");
@@ -378,11 +378,14 @@ async fn post_user(
     conn.execute(
         "insert into user (username, discord_id) values ((?1), (?2))",
         (&username, &discord_id),
-    ).map_err(|err| InternalError::new(format!("Failed to insert user in db: {err}")))?;
+    )
+    .map_err(|err| InternalError::new(format!("Failed to insert user in db: {err}")))?;
 
     info!("New user created");
 
-    session.insert("username", username.clone()).expect("Session is stored in memory");
+    session
+        .insert("username", username.clone())
+        .expect("Session is stored in memory");
 
     let content = WelcomeUser {
         username: username.clone(),
