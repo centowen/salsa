@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use deadpool_sqlite::{Config, CreatePoolError, Pool, PoolError, Runtime};
+use deadpool_sqlite::{CreatePoolError, PoolError};
 use log::debug;
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
