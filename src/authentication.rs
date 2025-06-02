@@ -252,7 +252,7 @@ async fn authenticate_from_discord(
     );
 
     if let Err(rusqlite::Error::QueryReturnedNoRows) = name_maybe {
-        info!("Redirecting to create new user");
+        debug!("Redirecting to create new user");
         session
             .insert("discord_id", &user_data.id)
             .expect("MemoryStore should work every time");
