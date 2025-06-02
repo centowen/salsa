@@ -105,11 +105,11 @@ struct ClientSecrets {
 
 fn read_discord_secrets() -> Result<ClientSecrets, InternalError> {
     let filename = ".secrets.toml";
-    let contents = read_to_string(filename).map_err(|err| InternalError::new(
-        format!("Failed to read from '{filename}': {err}")))?;
-    let secrets: Secrets =
-        toml::from_str(&contents).map_err(|err| InternalError::new(
-            format!("Failed to parse toml from {filename}: {err}")))?;
+    let contents = read_to_string(filename)
+        .map_err(|err| InternalError::new(format!("Failed to read from '{filename}': {err}")))?;
+    let secrets: Secrets = toml::from_str(&contents).map_err(|err| {
+        InternalError::new(format!("Failed to parse toml from {filename}: {err}"))
+    })?;
     Ok(secrets.discord)
 }
 
@@ -274,7 +274,9 @@ async fn authenticate_from_discord(
             Ok((headers, Redirect::to("/")).into_response())
         }
         // Something went horribly wrong!
-        Err(err) => Err(InternalError::new(format!("Failed to execute SQL query: {err}")))
+        Err(err) => Err(InternalError::new(format!(
+            "Failed to execute SQL query: {err}"
+        ))),
     }
 }
 
@@ -385,7 +387,10 @@ impl IntoResponse for InternalError {
     fn into_response(self) -> Response {
         // (thak): I find it somewhat dubious to log here in the conversion
         // function ... but I can't deny it's convenient.
-        error!("Error encountered while processiong request: {}", self.message);
+        error!(
+            "Error encountered while processiong request: {}",
+            self.message
+        );
         StatusCode::INTERNAL_SERVER_ERROR.into_response()
     }
 }
