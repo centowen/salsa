@@ -28,17 +28,17 @@ use tokio::sync::Mutex;
 
 use crate::index::render_main;
 
-const SESSION: &str = "session";
-
-#[derive(Clone)]
-pub struct User {
-    pub name: String,
-}
+const SESSION_COOKIE_NAME: &str = "session";
 
 #[derive(Clone)]
 pub struct AuthenticationState {
     pub database_connection: Arc<Mutex<Connection>>,
     pub store: MemoryStore,
+}
+
+#[derive(Clone)]
+pub struct User {
+    pub name: String,
 }
 
 pub async fn extract_session(
@@ -48,10 +48,8 @@ pub async fn extract_session(
 ) -> Result<Response, StatusCode> {
     debug!("Authenticating user session");
     let session = get_user_session(request.headers(), &state.store).await;
-    dbg!(&session);
     // TODO(#151): Username should be fetched from db.
     let username = session.and_then(|s| s.get("username"));
-    dbg!(&username);
     request.extensions_mut().insert(User {
         name: username.unwrap_or_else(|| "".to_string()),
     });
@@ -70,27 +68,6 @@ pub fn routes(database_connection: Arc<Mutex<Connection>>, store: MemoryStore) -
             store,
         })
 }
-
-// This type is specified because the oauth2 crate uses type states (it encodes
-// the state within the type). Perhaps there is a more convenient way to do this?
-pub type DiscordClient<
-    HasAuthUrl = EndpointSet,
-    HasDeviceAuthUrl = EndpointNotSet,
-    HasIntrospectionUrl = EndpointNotSet,
-    HasRevocationUrl = EndpointNotSet,
-    HasTokenUrl = EndpointSet,
-> = oauth2::Client<
-    BasicErrorResponse,
-    BasicTokenResponse,
-    BasicTokenIntrospectionResponse,
-    StandardRevocableToken,
-    BasicRevocationErrorResponse,
-    HasAuthUrl,
-    HasDeviceAuthUrl,
-    HasIntrospectionUrl,
-    HasRevocationUrl,
-    HasTokenUrl,
->;
 
 #[derive(Deserialize)]
 struct Secrets {
@@ -165,7 +142,7 @@ async fn redirect_to_discord(
         .await
         .expect("Storing into memory store should never fail.")
         .expect("Should always get a cookie.");
-    let cookie = format!("{SESSION}={cookie}; SameSite=Lax; HttpOnly; Secure; Path=/");
+    let cookie = format!("{SESSION_COOKIE_NAME}={cookie}; SameSite=Lax; HttpOnly; Secure; Path=/");
 
     let mut headers = HeaderMap::new();
     headers.insert(
@@ -266,7 +243,7 @@ async fn authenticate_from_discord(
 
     // Note: We reuse the same session cookie name here. So we don't need to
     // reset that cookie.
-    let cookie = format!("{SESSION}={cookie}; SameSite=Lax; HttpOnly; Secure; Path=/");
+    let cookie = format!("{SESSION_COOKIE_NAME}={cookie}; SameSite=Lax; HttpOnly; Secure; Path=/");
 
     let mut headers = HeaderMap::new();
     headers.insert(
@@ -289,7 +266,9 @@ async fn authenticate_from_discord(
         Ok(name) => {
             info!("Logging in existing user");
             // TODO: This should be just fetched from the user table based on the id instead.
-            session.insert("username", name.clone()).unwrap();
+            session
+                .insert("username", name.clone())
+                .expect("Memory store yo!");
             Ok((headers, Redirect::to("/")).into_response())
         }
         Err(err) => Err(InternalError::new(format!(
@@ -317,7 +296,7 @@ async fn get_user_session(headers: &HeaderMap, store: &MemoryStore) -> Option<Se
             Some((kv.next()?, kv.next()?))
         })
         .find_map(|kv| match kv {
-            Some((SESSION, value)) => Some(value),
+            Some((SESSION_COOKIE_NAME, value)) => Some(value),
             _ => None,
         })?;
 
@@ -371,7 +350,10 @@ async fn post_user(
         Some(session) => session,
         None => return Ok(StatusCode::UNAUTHORIZED.into_response()),
     };
-    let discord_id: String = session.get("discord_id").unwrap();
+    let discord_id: String = session
+        .get("discord_id")
+        .ok_or_else(|| InternalError::new("No discord_id in session".to_string()))?;
+
     let username = user_form.username;
     let conn = state.database_connection.lock().await;
 
@@ -380,6 +362,8 @@ async fn post_user(
         (&username, &discord_id),
     )
     .map_err(|err| InternalError::new(format!("Failed to insert user in db: {err}")))?;
+
+    session.remove("discord_id");
 
     info!("New user created");
 
@@ -417,3 +401,24 @@ impl IntoResponse for InternalError {
         StatusCode::INTERNAL_SERVER_ERROR.into_response()
     }
 }
+
+// This type is specified because the oauth2 crate uses type states (it encodes
+// the state within the type). Perhaps there is a more convenient way to do this?
+pub type DiscordClient<
+    HasAuthUrl = EndpointSet,
+    HasDeviceAuthUrl = EndpointNotSet,
+    HasIntrospectionUrl = EndpointNotSet,
+    HasRevocationUrl = EndpointNotSet,
+    HasTokenUrl = EndpointSet,
+> = oauth2::Client<
+    BasicErrorResponse,
+    BasicTokenResponse,
+    BasicTokenIntrospectionResponse,
+    StandardRevocableToken,
+    BasicRevocationErrorResponse,
+    HasAuthUrl,
+    HasDeviceAuthUrl,
+    HasIntrospectionUrl,
+    HasRevocationUrl,
+    HasTokenUrl,
+>;
