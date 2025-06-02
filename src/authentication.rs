@@ -7,7 +7,7 @@ use axum::{
     extract::{Query, Request, State},
     http::{
         HeaderMap, StatusCode,
-        header::{COOKIE, SET_COOKIE, ToStrError},
+        header::{COOKIE, SET_COOKIE},
     },
     middleware::Next,
     response::{Html, IntoResponse, Redirect, Response},
@@ -181,14 +181,17 @@ async fn redirect_to_discord(
 #[derive(Debug, Deserialize)]
 struct AuthRequest {
     code: String,
+    #[allow(dead_code)] // TODO(#152): Use the state to get CSRF token.
     state: String,
 }
 
 #[derive(Debug, Deserialize)]
 struct DiscordUser {
     id: String,
+    #[allow(dead_code)] // We don't use this.
     avatar: Option<String>,
     username: String,
+    #[allow(dead_code)] // We don't use this.
     discriminator: String,
 }
 
@@ -197,7 +200,7 @@ async fn authenticate_from_discord(
     Query(query): Query<AuthRequest>,
     State(state): State<AuthenticationState>,
 ) -> Result<Response, InternalError> {
-    debug!("Coming back from discord");
+    debug!("Coming back from Discord");
     // TODO(#152): Validate CSRF token to ensure we originated the request in the first place.
 
     // 3. We use that code to request an authorization token from Discord.
@@ -205,11 +208,19 @@ async fn authenticate_from_discord(
         .redirect(reqwest::redirect::Policy::none())
         .build()
         .expect("Hardcoded client should always build.");
-    let token = create_oauth2_client()?
+    let token = match create_oauth2_client()?
         .exchange_code(AuthorizationCode::new(query.code.clone()))
         .request_async(&http_client)
         .await
-        .unwrap();
+        {
+            Ok(token) => token,
+            Err(err) => {
+                debug!("Failed to get token from Discord: {err}");
+                // This realistically happens because of an old or bogus request
+                // to this endpoint. Returning 401 is reasonable.
+                return Ok(StatusCode::UNAUTHORIZED.into_response());
+            }
+        };
 
     debug!("Code authenticated");
 
@@ -219,19 +230,23 @@ async fn authenticate_from_discord(
         .bearer_auth(token.access_token().secret())
         .send()
         .await
-        .unwrap()
+        .map_err(|err| InternalError::new(format!("Failed to fetch token from Discord: {err}")))?
         .json::<DiscordUser>()
         .await
-        .unwrap();
+        .map_err(|err| {
+            InternalError::new(format!("Failed to deserialize token from Discord: {err}"))
+        })?;
 
     let conn = state.database_connection.lock().await;
     let name_maybe = conn.query_row(
         "select * from user where discord_id = (?1)",
         (&user_data.id,),
-        |row| Ok(row.get::<usize, String>(1).unwrap()),
+        |row| {
+            Ok(row
+                .get::<usize, String>(1)
+                .expect("Table 'user' has known layout"))
+        },
     );
-
-    dbg!(&name_maybe);
 
     let cookie = state
         .store
@@ -239,14 +254,18 @@ async fn authenticate_from_discord(
         .await
         .expect("Storing into memory store should never fail.")
         .expect("Should always get a cookie.");
-    // Need to get the session out of the store. Creating it outside and cloning it will mess
-    // with its id.
+
+    // Need to fetch the session out of the store again. It's not possible to
+    // just create outside and store a clone, it will lose it's cookie state.
     let mut session = state
         .store
         .load_session(cookie.clone())
         .await
         .expect("We just put this session in.")
         .expect("really!");
+
+    // Note: We reuse the same session cookie name here. So we don't need to
+    // reset that cookie.
     let cookie = format!("{SESSION}={cookie}; SameSite=Lax; HttpOnly; Secure; Path=/");
 
     let mut headers = HeaderMap::new();
@@ -273,7 +292,6 @@ async fn authenticate_from_discord(
             session.insert("username", name.clone()).unwrap();
             Ok((headers, Redirect::to("/")).into_response())
         }
-        // Something went horribly wrong!
         Err(err) => Err(InternalError::new(format!(
             "Failed to execute SQL query: {err}"
         ))),
@@ -296,33 +314,33 @@ async fn get_user_session(headers: &HeaderMap, store: &MemoryStore) -> Option<Se
     let session_id = kv_pairs
         .map(|kv_string| {
             let mut kv = kv_string.splitn(2, "=");
-            (kv.next().unwrap(), kv.next().unwrap())
+            Some((kv.next()?, kv.next()?))
         })
-        .find_map(|(key, value)| match key {
-            SESSION => Some(value),
+        .find_map(|kv| match kv {
+            Some((SESSION, value)) => Some(value),
             _ => None,
         })?;
 
-    dbg!(session_id);
-
     let session = match store.load_session(session_id.to_string()).await {
         Ok(session) => session,
-        // TODO: Clear the cookie here
+        // TODO(#153): Clear the cookie here
         Err(_) => return None,
     };
-
-    println!("Fetched session from cookie");
-    dbg!(&session);
     session
 }
 
 async fn get_user(
     headers: HeaderMap,
     State(state): State<AuthenticationState>,
-) -> impl IntoResponse {
-    let session = get_user_session(&headers, &state.store).await.unwrap();
+) -> Result<Response, InternalError> {
+    let session = match get_user_session(&headers, &state.store).await {
+        Some(session) => session,
+        None => return Ok(StatusCode::UNAUTHORIZED.into_response()),
+    };
     let content = DisplayUser {
-        username: session.get("discord_username").unwrap(),
+        username: session
+            .get("discord_username")
+            .ok_or_else(|| InternalError::new(format!("Failed to get Discord username from session")))?,
     }
     .render()
     .expect("Template rendering should always succeed");
@@ -331,7 +349,7 @@ async fn get_user(
     } else {
         render_main("".to_string(), content)
     };
-    Html(content)
+    Ok(Html(content).into_response())
 }
 
 #[derive(Deserialize, Debug)]
@@ -348,21 +366,23 @@ async fn post_user(
     headers: HeaderMap,
     State(state): State<AuthenticationState>,
     Form(user_form): Form<UserForm>,
-) -> impl IntoResponse {
-    dbg!(&user_form);
-    let mut session = get_user_session(&headers, &state.store).await.unwrap();
+) -> Result<Response, InternalError> {
+    let mut session = match get_user_session(&headers, &state.store).await {
+        Some(session) => session,
+        None => return Ok(StatusCode::UNAUTHORIZED.into_response()),
+    };
     let discord_id: String = session.get("discord_id").unwrap();
     let username = user_form.username;
     let conn = state.database_connection.lock().await;
+
     conn.execute(
         "insert into user (username, discord_id) values ((?1), (?2))",
         (&username, &discord_id),
-    )
-    .unwrap();
+    ).map_err(|err| InternalError::new(format!("Failed to insert user in db: {err}")))?;
 
-    session.insert("username", username.clone()).unwrap();
+    info!("New user created");
 
-    dbg!(session);
+    session.insert("username", username.clone()).expect("Session is stored in memory");
 
     let content = WelcomeUser {
         username: username.clone(),
@@ -370,7 +390,7 @@ async fn post_user(
     .render()
     .expect("Template rendering should always succeed");
     // Always redraw everything to update log in state.
-    Html(render_main(username, content))
+    Ok(Html(render_main(username, content)).into_response())
 }
 
 struct InternalError {
@@ -394,31 +414,3 @@ impl IntoResponse for InternalError {
         StatusCode::INTERNAL_SERVER_ERROR.into_response()
     }
 }
-
-struct Error {}
-
-impl From<ToStrError> for Error {
-    fn from(_: ToStrError) -> Self {
-        Error {}
-    }
-}
-
-impl IntoResponse for Error {
-    fn into_response(self) -> Response {
-        StatusCode::FORBIDDEN.into_response()
-    }
-}
-
-// OAuth2 based authentication
-//
-// - Follow the Axum example to set up one provider.
-// - We need session storage or jwt.
-//   - The async-session crate could be used, but then we need sqlx probably.
-// - Set up more providers
-//   - Google
-//   - Apple
-//   - Microsoft?
-//   - Some european alternative?
-// - The user still needs to live in our database, it's just that auth goes through OAuth2
-//   - Pseudonymous should be allowed
-//
