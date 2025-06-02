@@ -1,5 +1,5 @@
 use async_session::MemoryStore;
-use authentication::{SessionState, extract_session};
+use authentication::{AuthenticationState, extract_session};
 use axum::{Router, middleware, routing::get};
 use axum_server::tls_rustls::RustlsConfig;
 use clap::Parser;
@@ -75,7 +75,7 @@ async fn main() {
         .nest("/telescope", telescope_routes::routes(telescopes.clone()))
         .layer(TraceLayer::new_for_http())
         .route_layer(middleware::from_fn_with_state(
-            SessionState {
+            AuthenticationState {
                 database_connection,
                 store,
             },

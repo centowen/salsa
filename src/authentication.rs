@@ -13,7 +13,7 @@ use axum::{
     response::{Html, IntoResponse, Redirect, Response},
     routing::{get, post},
 };
-use log::{debug, info};
+use log::{debug, error, info};
 use oauth2::{
     AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken, EndpointNotSet, EndpointSet,
     RedirectUrl, Scope, StandardRevocableToken, TokenResponse, TokenUrl,
@@ -36,25 +36,26 @@ pub struct User {
 }
 
 #[derive(Clone)]
-pub struct SessionState {
+pub struct AuthenticationState {
     pub database_connection: Arc<Mutex<Connection>>,
     pub store: MemoryStore,
 }
 
 pub async fn extract_session(
-    State(state): State<SessionState>,
+    State(state): State<AuthenticationState>,
     mut request: Request,
     next: Next,
 ) -> Result<Response, StatusCode> {
     debug!("Authenticating user session");
     let session = get_user_session(request.headers(), &state.store).await;
     dbg!(&session);
-    // TODO: Username should be fetched from db.
+    // TODO(#151): Username should be fetched from db.
     let username = session.and_then(|s| s.get("username"));
     dbg!(&username);
     request.extensions_mut().insert(User {
         name: username.unwrap_or_else(|| "".to_string()),
     });
+    debug!("User authenticated");
     Ok(next.run(request).await)
 }
 
@@ -64,7 +65,7 @@ pub fn routes(database_connection: Arc<Mutex<Connection>>, store: MemoryStore) -
         .route("/discord", get(redirect_to_discord))
         .route("/create_user", get(get_user))
         .route("/create_user", post(post_user))
-        .with_state(SessionState {
+        .with_state(AuthenticationState {
             database_connection,
             store,
         })
@@ -102,26 +103,29 @@ struct ClientSecrets {
     client_secret: String,
 }
 
-fn read_discord_secrets() -> ClientSecrets {
-    let contents = read_to_string(".secrets.toml").expect("A .secrets.toml file must exist.");
+fn read_discord_secrets() -> Result<ClientSecrets, InternalError> {
+    let filename = ".secrets.toml";
+    let contents = read_to_string(filename).map_err(|err| InternalError::new(
+        format!("Failed to read from '{filename}': {err}")))?;
     let secrets: Secrets =
-        toml::from_str(&contents).expect("The .secrets.toml file should be parseable");
-    secrets.discord
+        toml::from_str(&contents).map_err(|err| InternalError::new(
+            format!("Failed to parse toml from {filename}: {err}")))?;
+    Ok(secrets.discord)
 }
 
-fn create_oauth2_client() -> DiscordClient {
+fn create_oauth2_client() -> Result<DiscordClient, InternalError> {
     // TODO: Don't read the secrets from disc all the time probably...
     let ClientSecrets {
         client_id,
         client_secret,
-    } = read_discord_secrets();
-    BasicClient::new(ClientId::new(client_id.to_string()))
+    } = read_discord_secrets()?;
+    let client = BasicClient::new(ClientId::new(client_id.to_string()))
         .set_client_secret(ClientSecret::new(client_secret.to_string()))
         .set_auth_uri(
             AuthUrl::new("https://discord.com/api/oauth2/authorize?response_type=code".to_string())
                 .expect("Hardcoded URL should always work"),
         )
-        // FIXME: This url should be retrieved from where we are deployed.
+        // TODO: This url should be retrieved from where we are deployed.
         .set_redirect_uri(
             RedirectUrl::new("http://127.0.0.1:3000/auth/authorized".to_string())
                 .expect("Hardcoded URL should always work."),
@@ -129,7 +133,8 @@ fn create_oauth2_client() -> DiscordClient {
         .set_token_uri(
             TokenUrl::new("https://discord.com/api/oauth2/token".to_string())
                 .expect("Hardcoded URL should always work."),
-        )
+        );
+    Ok(client)
 }
 
 // Basic Oath2 flow
@@ -141,11 +146,10 @@ fn create_oauth2_client() -> DiscordClient {
 
 // 1. We redirect the user to Discord where they authorize our app.
 async fn redirect_to_discord(
-    State(state): State<SessionState>,
-) -> Result<impl IntoResponse, Error> {
+    State(state): State<AuthenticationState>,
+) -> Result<impl IntoResponse, InternalError> {
     // To know that we're the originator of the request when the user comes back from Discord
-    let client = create_oauth2_client();
-    let (url, token) = client
+    let (url, token) = create_oauth2_client()?
         .authorize_url(CsrfToken::new_random)
         .add_scope(Scope::new("identify".to_string()))
         .add_extra_param("prompt".to_string(), "none".to_string())
@@ -191,18 +195,17 @@ struct DiscordUser {
 // 2. User comes back with an authorization code.
 async fn authenticate_from_discord(
     Query(query): Query<AuthRequest>,
-    State(state): State<SessionState>,
-) -> Response {
+    State(state): State<AuthenticationState>,
+) -> Result<Response, InternalError> {
     debug!("Coming back from discord");
-    // FIXME: Validate CSRF token to ensure we originated the request in the first place.
+    // TODO(#152): Validate CSRF token to ensure we originated the request in the first place.
 
     // 3. We use that code to request an authorization token from Discord.
     let http_client = reqwest::ClientBuilder::new()
         .redirect(reqwest::redirect::Policy::none())
         .build()
         .expect("Hardcoded client should always build.");
-    let client = create_oauth2_client();
-    let token = client
+    let token = create_oauth2_client()?
         .exchange_code(AuthorizationCode::new(query.code.clone()))
         .request_async(&http_client)
         .await
@@ -260,7 +263,7 @@ async fn authenticate_from_discord(
         session
             .insert("discord_username", &user_data.username)
             .expect("MemoryStore should work every time");
-        return (headers, Redirect::to("create_user")).into_response();
+        return Ok((headers, Redirect::to("create_user")).into_response());
     }
 
     match name_maybe {
@@ -268,10 +271,10 @@ async fn authenticate_from_discord(
             info!("Logging in existing user");
             // TODO: This should be just fetched from the user table based on the id instead.
             session.insert("username", name.clone()).unwrap();
-            (headers, Redirect::to("/")).into_response()
+            Ok((headers, Redirect::to("/")).into_response())
         }
         // Something went horribly wrong!
-        Err(err) => panic!("Unexpected error: {err}"),
+        Err(err) => Err(InternalError::new(format!("Failed to execute SQL query: {err}")))
     }
 }
 
@@ -313,7 +316,7 @@ async fn get_user_session(headers: &HeaderMap, store: &MemoryStore) -> Option<Se
 
 async fn get_user(
     headers: HeaderMap,
-    State(state): State<SessionState>,
+    State(state): State<AuthenticationState>,
 ) -> impl IntoResponse {
     let session = get_user_session(&headers, &state.store).await.unwrap();
     let content = DisplayUser {
@@ -341,7 +344,7 @@ struct WelcomeUser {
 }
 async fn post_user(
     headers: HeaderMap,
-    State(state): State<SessionState>,
+    State(state): State<AuthenticationState>,
     Form(user_form): Form<UserForm>,
 ) -> impl IntoResponse {
     dbg!(&user_form);
@@ -368,11 +371,30 @@ async fn post_user(
     Html(render_main(username, content))
 }
 
+struct InternalError {
+    message: String,
+}
+
+impl InternalError {
+    fn new(message: String) -> InternalError {
+        InternalError { message }
+    }
+}
+
+impl IntoResponse for InternalError {
+    fn into_response(self) -> Response {
+        // (thak): I find it somewhat dubious to log here in the conversion
+        // function ... but I can't deny it's convenient.
+        error!("Error encountered while processiong request: {}", self.message);
+        StatusCode::INTERNAL_SERVER_ERROR.into_response()
+    }
+}
+
 struct Error {}
 
 impl From<ToStrError> for Error {
     fn from(_: ToStrError) -> Self {
-        return Error {};
+        Error {}
     }
 }
 
