@@ -171,7 +171,7 @@ impl Telescope for FakeTelescope {
         }
 
         if self.receiver_configuration.integrate {
-            log::info!("Pushing spectum...");
+            log::trace!("Pushing spectum...");
             self.current_spectra.push(create_fake_spectra(delta_time))
         }
 
