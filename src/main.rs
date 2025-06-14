@@ -14,6 +14,7 @@ mod authentication;
 mod bookings;
 mod coords;
 mod database;
+mod error;
 mod fake_telescope;
 mod index;
 mod observe_routes;
@@ -24,6 +25,7 @@ mod telescope_routes;
 mod telescope_tracker;
 mod telescopes;
 mod template;
+mod user;
 mod weather;
 
 #[derive(Parser, Debug)]

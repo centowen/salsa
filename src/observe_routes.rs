@@ -1,4 +1,3 @@
-use crate::authentication::User;
 use crate::bookings::Booking;
 use crate::database::{DataBase, Storage};
 use crate::index::render_main;
@@ -7,6 +6,7 @@ use crate::telescope_routes::state;
 use crate::telescopes::{
     ReceiverConfiguration, ReceiverError, TelescopeError, TelescopeInfo, TelescopeTarget,
 };
+use crate::user::User;
 use askama::Template;
 use axum::body::Body;
 use axum::extract::{Path, State};

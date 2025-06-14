@@ -6,7 +6,7 @@ use axum::{
     response::{Html, IntoResponse, Response},
 };
 
-use crate::authentication::User;
+use crate::user::User;
 
 #[derive(Template)]
 #[template(path = "index.html", escape = "none")]

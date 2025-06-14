@@ -13,7 +13,7 @@ use axum::{
     response::{Html, IntoResponse, Redirect, Response},
     routing::{get, post},
 };
-use log::{debug, error, info};
+use log::{debug, info};
 use oauth2::{
     AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken, EndpointNotSet, EndpointSet,
     RedirectUrl, Scope, StandardRevocableToken, TokenResponse, TokenUrl,
@@ -26,7 +26,9 @@ use rusqlite::{Connection, Result};
 use serde::Deserialize;
 use tokio::sync::Mutex;
 
+use crate::error::InternalError;
 use crate::index::render_main;
+use crate::user::User;
 
 const SESSION_COOKIE_NAME: &str = "session";
 
@@ -34,11 +36,6 @@ const SESSION_COOKIE_NAME: &str = "session";
 pub struct AuthenticationState {
     pub database_connection: Arc<Mutex<Connection>>,
     pub store: MemoryStore,
-}
-
-#[derive(Clone)]
-pub struct User {
-    pub name: String,
 }
 
 pub async fn extract_session(
@@ -214,16 +211,7 @@ async fn authenticate_from_discord(
             InternalError::new(format!("Failed to deserialize token from Discord: {err}"))
         })?;
 
-    let conn = state.database_connection.lock().await;
-    let name_maybe = conn.query_row(
-        "select * from user where discord_id = (?1)",
-        (&user_data.id,),
-        |row| {
-            Ok(row
-                .get::<usize, String>(1)
-                .expect("Table 'user' has known layout"))
-        },
-    );
+    let user = User::fetch_with_discord_id(state.database_connection, user_data.id.clone()).await?;
 
     let cookie = state
         .store
@@ -251,19 +239,8 @@ async fn authenticate_from_discord(
         cookie.parse().expect("Cookie should be parseable always."),
     );
 
-    if let Err(rusqlite::Error::QueryReturnedNoRows) = name_maybe {
-        debug!("Redirecting to create new user");
-        session
-            .insert("discord_id", &user_data.id)
-            .expect("MemoryStore should work every time");
-        session
-            .insert("discord_username", &user_data.username)
-            .expect("MemoryStore should work every time");
-        return Ok((headers, Redirect::to("create_user")).into_response());
-    }
-
-    match name_maybe {
-        Ok(name) => {
+    match user {
+        Some(User { name }) => {
             info!("Logging in existing user");
             // TODO: This should be just fetched from the user table based on the id instead.
             session
@@ -271,9 +248,16 @@ async fn authenticate_from_discord(
                 .expect("Memory store yo!");
             Ok((headers, Redirect::to("/")).into_response())
         }
-        Err(err) => Err(InternalError::new(format!(
-            "Failed to execute SQL query: {err}"
-        ))),
+        None => {
+            debug!("Redirecting to create new user");
+            session
+                .insert("discord_id", &user_data.id)
+                .expect("MemoryStore should work every time");
+            session
+                .insert("discord_username", &user_data.username)
+                .expect("MemoryStore should work every time");
+            Ok((headers, Redirect::to("create_user")).into_response())
+        }
     }
 }
 
@@ -300,12 +284,11 @@ async fn get_user_session(headers: &HeaderMap, store: &MemoryStore) -> Option<Se
             _ => None,
         })?;
 
-    let session = match store.load_session(session_id.to_string()).await {
-        Ok(session) => session,
-        // TODO(#153): Clear the cookie here
-        Err(_) => return None,
-    };
-    session
+    // TODO(#153): Clear the cookie here on failure to get the session.
+    store
+        .load_session(session_id.to_string())
+        .await
+        .unwrap_or(None)
 }
 
 async fn get_user(
@@ -318,7 +301,7 @@ async fn get_user(
     };
     let content = DisplayUser {
         username: session.get("discord_username").ok_or_else(|| {
-            InternalError::new(format!("Failed to get Discord username from session"))
+            InternalError::new("Failed to get Discord username from session".to_string())
         })?,
     }
     .render()
@@ -355,13 +338,8 @@ async fn post_user(
         .ok_or_else(|| InternalError::new("No discord_id in session".to_string()))?;
 
     let username = user_form.username;
-    let conn = state.database_connection.lock().await;
 
-    conn.execute(
-        "insert into user (username, discord_id) values ((?1), (?2))",
-        (&username, &discord_id),
-    )
-    .map_err(|err| InternalError::new(format!("Failed to insert user in db: {err}")))?;
+    User::create_from_discord(state.database_connection, username.clone(), discord_id).await?;
 
     session.remove("discord_id");
 
@@ -378,28 +356,6 @@ async fn post_user(
     .expect("Template rendering should always succeed");
     // Always redraw everything to update log in state.
     Ok(Html(render_main(username, content)).into_response())
-}
-
-struct InternalError {
-    message: String,
-}
-
-impl InternalError {
-    fn new(message: String) -> InternalError {
-        InternalError { message }
-    }
-}
-
-impl IntoResponse for InternalError {
-    fn into_response(self) -> Response {
-        // (thak): I find it somewhat dubious to log here in the conversion
-        // function ... but I can't deny it's convenient.
-        error!(
-            "Error encountered while processiong request: {}",
-            self.message
-        );
-        StatusCode::INTERNAL_SERVER_ERROR.into_response()
-    }
 }
 
 // This type is specified because the oauth2 crate uses type states (it encodes
