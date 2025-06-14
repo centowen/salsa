@@ -56,14 +56,13 @@
     </p>
 
     <p>
-      <button hx-post="#" hx-target="#page" name="action" value="go">Go!</button>
-    </p>
-    <p>
-      <button hx-post="#" hx-target="#page" name="action" value="park">Park</button>
+      <button hx-post="/observe/{{ info.id }}/set-target" hx-target="#page">Track</button>
     </p>
   </form>
+  <p>
+    <button hx-post="/observe/{{ info.id }}/observe" hx-target="#page">observe</button>
+  </p>
   <div id="state" hx-get="/telescope/{{ info.id }}/state" hx-trigger="every 1s">
     {{ state_html }}
   </div>
 </div>
-

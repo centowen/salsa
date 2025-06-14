@@ -32,7 +32,8 @@ pub fn routes(
 ) -> Router {
     let observe_routes = Router::new()
         .route("/", get(get_observe))
-        .route("/", post(post_observe));
+        .route("/set-target", post(set_target))
+        .route("/observe", post(start_observe));
     Router::new()
         .nest("/{telescope_id}", observe_routes)
         .with_state(ObserveState {
@@ -46,7 +47,6 @@ struct Target {
     x: f64, // Degrees
     y: f64, // Degrees
     coordinate_system: String,
-    action: String,
 }
 
 enum ObserveError {
@@ -102,7 +102,7 @@ fn error_response(message: String) -> Response {
         .expect("Building a response should never fail")
 }
 
-async fn post_observe<StorageType>(
+async fn set_target<StorageType>(
     State(state): State<ObserveState<StorageType>>,
     Path(telescope_id): Path<String>,
     Form(target): Form<Target>,
@@ -112,28 +112,24 @@ where
 {
     let x_rad = target.x.to_radians();
     let y_rad = target.y.to_radians();
-    let target = match (target.action.as_str(), target.coordinate_system.as_str()) {
-        ("go", "galactic") => TelescopeTarget::Galactic {
+    let target = match target.coordinate_system.as_str() {
+        "galactic" => TelescopeTarget::Galactic {
             longitude: x_rad,
             latitude: y_rad,
         },
-        ("go", "equatorial") => TelescopeTarget::Equatorial {
+        "equatorial" => TelescopeTarget::Equatorial {
             right_ascension: x_rad,
             declination: y_rad,
         },
-        ("go", "horizontal") => TelescopeTarget::Horizontal {
+        "horizontal" => TelescopeTarget::Horizontal {
             azimuth: x_rad,
             elevation: y_rad,
         },
-        ("park", _) => TelescopeTarget::Parked,
-        ("go", coordinate_system) => {
+        coordinate_system => {
             return Err(ObserveError::BadQuery(format!(
                 "Unkown coordinate system {}",
                 coordinate_system
             )));
-        }
-        (action, _) => {
-            return Err(ObserveError::BadQuery(format!("Unkown action {}", action)));
         }
     };
 
@@ -143,7 +139,22 @@ where
         .await
         .ok_or(ObserveError::TelescopeNotFound("fake".to_string()))?;
     telescope.set_target(target).await?;
-    // FIXME: Don't set integrate to true immediately, control from UI instead.
+    let content = observe(telescope.clone()).await?;
+    Ok(Html(content))
+}
+
+async fn start_observe<StorageType>(
+    State(state): State<ObserveState<StorageType>>,
+    Path(telescope_id): Path<String>,
+) -> Result<impl IntoResponse, ObserveError>
+where
+    StorageType: Storage,
+{
+    let mut telescope = state
+        .telescopes
+        .get(&telescope_id)
+        .await
+        .ok_or(ObserveError::TelescopeNotFound("fake".to_string()))?;
     telescope
         .set_receiver_configuration(ReceiverConfiguration { integrate: true })
         .await?;
