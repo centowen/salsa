@@ -26,7 +26,6 @@ mod telescope_tracker;
 mod telescopes;
 mod template;
 mod user;
-mod weather;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -72,7 +71,6 @@ async fn main() {
             "/observe",
             observe_routes::routes(telescopes.clone(), database.clone()),
         )
-        .route("/weather", get(weather::get_weather_info))
         .nest("/bookings", bookings::routes::routes(database.clone()))
         .nest("/telescope", telescope_routes::routes(telescopes.clone()))
         .layer(TraceLayer::new_for_http())
