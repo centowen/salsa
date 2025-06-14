@@ -1,8 +1,8 @@
-use crate::authentication::User;
 use crate::bookings::Booking;
 use crate::database::{DataBase, Storage};
 use crate::index::render_main;
 use crate::template::HtmlTemplate;
+use crate::user::User;
 use askama::Template;
 use axum::http::HeaderMap;
 use axum::response::{Html, IntoResponse};
