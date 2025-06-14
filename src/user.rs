@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use rusqlite::Connection;
+use rusqlite::{Connection, Error};
 use tokio::sync::Mutex;
 
 use crate::error::InternalError;
@@ -30,17 +30,20 @@ impl User {
         discord_id: String,
     ) -> Result<Option<User>, InternalError> {
         let conn = connection.lock().await;
-        let name = conn
-            .query_row(
-                "select * from user where discord_id = (?1)",
-                ((discord_id),),
-                |row| {
-                    Ok(row
-                        .get::<usize, String>(1)
-                        .expect("Table 'user' has known layout"))
-                },
-            )
-            .map_err(|err| InternalError::new(format!("Failed to fetch user from db: {err}")))?;
-        Ok(Some(User { name }))
+        match conn.query_row(
+            "select * from user where discord_id = (?1)",
+            ((discord_id),),
+            |row| {
+                Ok(row
+                    .get::<usize, String>(1)
+                    .expect("Table 'user' has known layout"))
+            },
+        ) {
+            Ok(name) => Ok(Some(User { name })),
+            Err(Error::QueryReturnedNoRows) => Ok(None),
+            Err(err) => Err(InternalError::new(format!(
+                "Failed to fetch user from db: {err}"
+            ))),
+        }
     }
 }
