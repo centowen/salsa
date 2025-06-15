@@ -176,7 +176,7 @@ fn has_active_booking(user: &User, bookings: &[Booking]) -> bool {
 }
 
 async fn get_observe<StorageType>(
-    Extension(user): Extension<User>,
+    Extension(user): Extension<Option<User>>,
     State(state): State<ObserveState<StorageType>>,
     Path(telescope_id): Path<String>,
     headers: HeaderMap,
@@ -190,14 +190,14 @@ where
         .await
         .expect("As long as no one is manually editing the database, this should never fail.");
     let bookings = data_model.bookings;
-    if !has_active_booking(&user, &bookings) {
+    if user.is_none() || !has_active_booking(&user.as_ref().unwrap(), &bookings) {
         let content = DontObserveTemplate {}
             .render()
             .expect("Template rendering should always succeed");
         let content = if headers.get("hx-request").is_some() {
             content
         } else {
-            render_main(user.name, content)
+            render_main(user.clone(), content)
         };
         return Ok(Html(content));
     }
@@ -210,7 +210,7 @@ where
     let content = if headers.get("hx-request").is_some() {
         content
     } else {
-        render_main(user.name, content)
+        render_main(user, content)
     };
     Ok(Html(content))
 }

@@ -13,7 +13,7 @@ use axum::{
     response::{Html, IntoResponse, Redirect, Response},
     routing::{get, post},
 };
-use log::{debug, info};
+use log::{debug, info, trace};
 use oauth2::{
     AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken, EndpointNotSet, EndpointSet,
     RedirectUrl, Scope, StandardRevocableToken, TokenResponse, TokenUrl,
@@ -45,12 +45,32 @@ pub async fn extract_session(
 ) -> Result<Response, StatusCode> {
     debug!("Authenticating user session");
     let session = get_user_session(request.headers(), &state.store).await;
-    // TODO(#151): Username should be fetched from db.
-    let username = session.and_then(|s| s.get("username"));
-    request.extensions_mut().insert(User {
-        name: username.unwrap_or_else(|| "".to_string()),
-    });
-    debug!("User authenticated");
+    trace!("Session get: {}", session.is_some());
+    if let Some(session) = session.clone() {
+        dbg!(session);
+    }
+    let user = match session.and_then(|s| {
+        dbg!(&s);
+        s.get::<i64>("user_id")
+    }) {
+        // TODO: InternalError -> Not logged in ... ok?
+        Some(user_id) => {
+            trace!("Got a user id from session");
+            User::fetch(state.database_connection, user_id)
+                .await
+                .unwrap_or(None)
+        }
+        None => {
+            trace!("No user id in session");
+            None
+        }
+    };
+    request.extensions_mut().insert(user.clone());
+    if user.is_some() {
+        debug!("User authenticated.");
+    } else {
+        debug!("No user logged in.");
+    }
     Ok(next.run(request).await)
 }
 
@@ -240,12 +260,10 @@ async fn authenticate_from_discord(
     );
 
     match user {
-        Some(User { name }) => {
+        Some(User { id, .. }) => {
             info!("Logging in existing user");
-            // TODO: This should be just fetched from the user table based on the id instead.
-            session
-                .insert("username", name.clone())
-                .expect("Memory store yo!");
+            session.insert("user_id", id).expect("Memory store yo!");
+            dbg!(session);
             Ok((headers, Redirect::to("/")).into_response())
         }
         None => {
@@ -309,7 +327,7 @@ async fn get_user(
     let content = if headers.get("hx-request").is_some() {
         content
     } else {
-        render_main("".to_string(), content)
+        render_main(None, content)
     };
     Ok(Html(content).into_response())
 }
@@ -339,14 +357,15 @@ async fn post_user(
 
     let username = user_form.username;
 
-    User::create_from_discord(state.database_connection, username.clone(), discord_id).await?;
+    let user =
+        User::create_from_discord(state.database_connection, username.clone(), discord_id).await?;
 
     session.remove("discord_id");
 
     info!("New user created");
 
     session
-        .insert("username", username.clone())
+        .insert("user_id", user.id)
         .expect("Session is stored in memory");
 
     let content = WelcomeUser {
@@ -355,7 +374,7 @@ async fn post_user(
     .render()
     .expect("Template rendering should always succeed");
     // Always redraw everything to update log in state.
-    Ok(Html(render_main(username, content)).into_response())
+    Ok(Html(render_main(Some(user), content)).into_response())
 }
 
 // This type is specified because the oauth2 crate uses type states (it encodes
