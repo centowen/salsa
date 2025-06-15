@@ -15,17 +15,23 @@ struct IndexTemplate {
     content: String,
 }
 
-pub async fn get_index(Extension(user): Extension<User>) -> Response {
-    // TODO: Read this file at startup.
+pub async fn get_index(Extension(user): Extension<Option<User>>) -> Response {
     Html(render_main(
-        user.name,
+        user,
+        // TODO: Read this file at startup.
         read_to_string("assets/welcome.html").expect("Reading static data should always work"),
     ))
     .into_response()
 }
 
-pub fn render_main(name: String, content: String) -> String {
-    IndexTemplate { name, content }
-        .render()
-        .expect("Template should always succeed")
+pub fn render_main(user: Option<User>, content: String) -> String {
+    IndexTemplate {
+        name: match user {
+            Some(User { id: _, name }) => name,
+            None => String::new(),
+        },
+        content,
+    }
+    .render()
+    .expect("Template should always succeed")
 }

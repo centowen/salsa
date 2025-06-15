@@ -5,9 +5,9 @@ use crate::template::HtmlTemplate;
 use crate::user::User;
 use askama::Template;
 use axum::http::HeaderMap;
-use axum::response::{Html, IntoResponse};
+use axum::response::{Html, IntoResponse, Response};
 use axum::{Extension, Form};
-use axum::{Router, extract::State, routing::get};
+use axum::{Router, extract::State, http::StatusCode, routing::get};
 use chrono::{DateTime, Duration, NaiveDate, NaiveDateTime, NaiveTime, TimeZone, Utc};
 use serde::Deserialize;
 
@@ -31,7 +31,7 @@ struct BookingsTemplate {
 }
 
 async fn get_bookings<StorageType>(
-    Extension(user): Extension<User>,
+    Extension(user): Extension<Option<User>>,
     headers: HeaderMap,
     State(db): State<DataBase<StorageType>>,
 ) -> impl IntoResponse
@@ -44,15 +44,18 @@ where
         .expect("As long as no one is manually editing the database, this should never fail.");
     let bookings = data_model.bookings;
     let now = Utc::now();
-    let my_bookings = bookings
-        .iter()
-        .filter(|b| b.user_name == user.name)
-        .cloned()
-        .map(|b| MyBooking {
-            inner: b.clone(),
-            active: now > b.start_time && now < b.end_time,
-        })
-        .collect();
+    let my_bookings = match user {
+        Some(ref user) => bookings
+            .iter()
+            .filter(|b| b.user_name == user.name)
+            .cloned()
+            .map(|b| MyBooking {
+                inner: b.clone(),
+                active: now > b.start_time && now < b.end_time,
+            })
+            .collect(),
+        None => Vec::new(),
+    };
     let telescope_names: Vec<String> = data_model
         .telescopes
         .iter()
@@ -68,7 +71,7 @@ where
     let content = if headers.get("hx-request").is_some() {
         content
     } else {
-        render_main(user.name, content)
+        render_main(user, content)
     };
     Html(content).into_response()
 }
@@ -82,13 +85,18 @@ struct BookingForm {
 }
 
 async fn create_booking<StorageType>(
-    Extension(user): Extension<User>,
+    Extension(user): Extension<Option<User>>,
     State(db): State<DataBase<StorageType>>,
     Form(booking_form): Form<BookingForm>,
-) -> impl IntoResponse
+) -> Response
 where
     StorageType: Storage,
 {
+    if user.is_none() {
+        return StatusCode::UNAUTHORIZED.into_response();
+    }
+    let user = user.unwrap();
+
     let naive_datetime = NaiveDateTime::new(booking_form.start_date, booking_form.start_time);
     let start_time: DateTime<Utc> = Utc.from_utc_datetime(&naive_datetime);
     let end_time = start_time + Duration::hours(booking_form.duration);
@@ -150,4 +158,5 @@ where
         bookings,
         telescope_names,
     })
+    .into_response()
 }
