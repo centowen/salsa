@@ -61,6 +61,33 @@ function get_telescope_from_location() {
     .attr("stroke", "steelblue")
     .attr("stroke-width", 1.5);
   document.currentScript.parentElement.appendChild(svg.node());
+  // Tooltip for displaying coordinates
+const tooltip = svg.append("text")
+  .attr("id", "tooltip")
+  .attr("x", width - margin)
+  .attr("y", margin)
+  .attr("text-anchor", "end")
+  .attr("alignment-baseline", "hanging")
+  .attr("font-size", "12px")
+  .attr("fill", "black");
+
+// Transparent rect for capturing mouse movement
+svg.append("rect")
+  .attr("width", width - 2 * margin)
+  .attr("height", height - 2 * margin)
+  .attr("x", margin)
+  .attr("y", margin)
+  .style("fill", "none")
+  .style("pointer-events", "all")
+  .on("mousemove", function (event) {
+    const [mouseX, mouseY] = d3.pointer(event);
+    const xValue = x.invert(mouseX).toFixed(2);
+    const yValue = y.invert(mouseY).toFixed(2);
+    tooltip.text(`X: ${xValue} MHz, Y: ${yValue}`);
+  })
+  .on("mouseout", function () {
+    tooltip.text("");
+  });
   // There can be a socket already here if the page is refetched by htmx.
   if (window.spectrumSocket) {
     window.spectrumSocket.close();
