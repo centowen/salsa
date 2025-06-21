@@ -1,4 +1,4 @@
-use std::{fs::read_to_string, str, sync::Arc};
+use std::{fmt::Display, fs::read_to_string, str, sync::Arc};
 
 use askama::Template;
 use async_session::{MemoryStore, Session, SessionStore};
@@ -175,8 +175,34 @@ async fn redirect_to_discord(
 #[derive(Debug, Deserialize)]
 struct AuthRequest {
     code: String,
-    #[allow(dead_code)] // TODO(#152): Use the state to get CSRF token.
+    // We store the CSRF token in the state.
     state: String,
+}
+
+struct CsrfError {}
+
+impl Display for CsrfError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("CSRF error occured")
+    }
+}
+
+fn validate_csrf_token(
+    session: Session,
+    user_supplied_token: String,
+) -> std::result::Result<(), CsrfError> {
+    if let Some(session_token) = session.get::<String>("csrf_token") {
+        if session_token == user_supplied_token {
+            debug!("CSRF token ok");
+            Ok(())
+        } else {
+            debug!("CSRF token doesn't match");
+            Err(CsrfError {})
+        }
+    } else {
+        debug!("No CSRF token in session");
+        Err(CsrfError {})
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -192,10 +218,23 @@ struct DiscordUser {
 // 2. User comes back with an authorization code.
 async fn authenticate_from_discord(
     Query(query): Query<AuthRequest>,
+    headers: HeaderMap,
     State(state): State<AuthenticationState>,
 ) -> Result<Response, InternalError> {
     debug!("Coming back from Discord");
-    // TODO(#152): Validate CSRF token to ensure we originated the request in the first place.
+    let session = match get_user_session(&headers, &state.store).await {
+        Some(session) => session,
+        None => {
+            debug!("No session found");
+            return Ok(StatusCode::UNAUTHORIZED.into_response());
+        }
+    };
+    if let Err(err) = validate_csrf_token(session, query.state) {
+        debug!("Failed to validate CSRF token from Discord: {err}");
+        // This realistically happens because of an old or bogus request
+        // to this endpoint. Returning 401 is reasonable.
+        return Ok(StatusCode::UNAUTHORIZED.into_response());
+    }
 
     // 3. We use that code to request an authorization token from Discord.
     let http_client = reqwest::ClientBuilder::new()
@@ -241,7 +280,7 @@ async fn authenticate_from_discord(
         .expect("Should always get a cookie.");
 
     // Need to fetch the session out of the store again. It's not possible to
-    // just create outside and store a clone, it will lose it's cookie state.
+    // just create outside and store a clone, it will lose its cookie state.
     let mut session = state
         .store
         .load_session(cookie.clone())
