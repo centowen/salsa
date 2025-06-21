@@ -87,7 +87,7 @@ pub enum TelescopeError {
 impl Display for TelescopeError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            TelescopeError::TargetBelowHorizon {} => {
+            TelescopeError::TargetBelowHorizon => {
                 f.write_str("Failed to set target, target is below horizon.")
             }
             TelescopeError::TelescopeIOError(message) => f.write_str(&format!(

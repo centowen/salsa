@@ -7,6 +7,7 @@ use crate::telescopes::{
 };
 use async_trait::async_trait;
 use chrono::Utc;
+use std::iter::zip;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
@@ -153,6 +154,7 @@ fn rot2prog_bytes_to_angle_documented(bytes: &[u8]) -> f64 {
     (rot2prog_bytes_to_int_documented(bytes) as f64 / 100.0 - 360.0).to_radians()
 }
 
+#[allow(clippy::too_many_arguments)]
 fn measure_switched(
     usrp: &mut Usrp,
     sfreq: f64,
@@ -246,31 +248,28 @@ fn measure_single(
     }
     // Normalise spectrum by number of stackings,
     // do **2 to get power spectrum
-    for i in 0..fft_pts {
-        fft_abs[i] = fft_abs[i] * fft_abs[i] / (nstack as f64);
+    for val in fft_abs.iter_mut().take(fft_pts) {
+        *val = *val * *val / (nstack as f64);
     }
 
     // median window filter data
     let mwkernel = 32; //median window filter size, power of 2
-    let threshold = 0.1; // thershold where to cut data and replace with median
+    let threshold = 0.1; // threshold where to cut data and replace with median
     let nchunks = fft_pts / mwkernel;
     for i in 0..nchunks {
         let chunk = &mut fft_abs[i * mwkernel..(i + 1) * mwkernel];
         let m = median(chunk.to_vec());
-        for n in 0..mwkernel {
-            let diff = (chunk[n] - m).abs();
+        for val in chunk.iter_mut() {
+            let diff = (*val - m).abs();
             if diff > threshold * m {
-                chunk[n] = m;
+                *val = m;
             }
         }
     }
 
     // Average spectrum to save data
     for i in 0..avg_pts {
-        let mut avg = 0.0;
-        for j in navg * i..navg * (i + 1) {
-            avg += fft_abs[j];
-        }
+        let avg: f64 = fft_abs.iter().skip(navg * i).take(navg).sum();
         fft_avg.push(avg / (navg as f64));
     }
 }
@@ -336,8 +335,8 @@ async fn measure(
 
         let mut measurements = measurements.lock().await;
         let measurement = measurements.last_mut().unwrap();
-        for i in 0..avg_pts {
-            measurement.amps[i] = (measurement.amps[i] * (n - 1.0) + spec[i]) / n;
+        for (amp, spec_val) in zip(measurement.amps.iter_mut(), spec.iter()).take(avg_pts) {
+            *amp = (*amp * (n - 1.0) + spec_val) / n;
         }
         measurement.duration = Utc::now()
             .signed_duration_since(measurement.start)

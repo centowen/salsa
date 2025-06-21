@@ -190,7 +190,7 @@ where
         .await
         .expect("As long as no one is manually editing the database, this should never fail.");
     let bookings = data_model.bookings;
-    if user.is_none() || !has_active_booking(&user.as_ref().unwrap(), &bookings) {
+    if user.is_none() || !has_active_booking(user.as_ref().unwrap(), &bookings) {
         let content = DontObserveTemplate {}
             .render()
             .expect("Template rendering should always succeed");
