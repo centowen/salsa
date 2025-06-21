@@ -26,26 +26,67 @@ impl Booking {
         connection: Arc<Mutex<Connection>>,
         user: User,
         telescope_id: String,
-        begin: DateTime<Utc>,
+        start: DateTime<Utc>,
         end: DateTime<Utc>,
     ) -> Result<Booking, Error> {
         // KNARK: Check overlap first!
         let conn = connection.lock().await;
         conn.execute(
-            "insert into booking (user_id, telescope_id, begin_timestamp, end_timestamp) values ((?1), (?2), (?3), (?4))",
-            (&user.id, &telescope_id, begin.timestamp(), end.timestamp())
+            "insert into booking (user_id, telescope_id, start_timestamp, end_timestamp)
+                 values ((?1), (?2), (?3), (?4))",
+            (&user.id, &telescope_id, start.timestamp(), end.timestamp()),
         )
-        .map_err(|err| Error::Internal(InternalError::new(format!("Failed to insert user in db: {err}"))))?;
+        .map_err(|err| {
+            Error::Internal(InternalError::new(format!(
+                "Failed to insert user in db: {err}"
+            )))
+        })?;
         Ok(Booking {
-            start_time: begin,
+            start_time: start,
             end_time: end,
-            telescope_name: String::new(), // KNARK: Fill this in
-            user_name: user.name,          // KNARK: This isn't right
+            telescope_name: telescope_id,
+            user_name: user.name,
         })
     }
 
-    pub fn fetch_all() -> Vec<Booking> {
-        todo!()
+    pub async fn fetch_all(connection: Arc<Mutex<Connection>>) -> Result<Vec<Booking>, Error> {
+        let conn = connection.lock().await;
+        let mut stmt = conn
+            .prepare(
+                "select start_timestamp, end_timestamp, telescope_id, name
+                        from booking, user
+                        where booking.user_id = user.id",
+            )
+            .map_err(|err| {
+                Error::Internal(InternalError::new(format!(
+                    "Failed to prepare statement: {err}"
+                )))
+            })?;
+        let bookings = stmt
+            .query_map([], |row| {
+                Ok(Booking {
+                    start_time: DateTime::<Utc>::from_timestamp(row.get(0)?, 0).unwrap(),
+                    end_time: DateTime::<Utc>::from_timestamp(row.get(1)?, 0).unwrap(),
+                    telescope_name: row.get(2)?,
+                    user_name: row.get(3)?,
+                })
+            })
+            .map_err(|err| {
+                Error::Internal(InternalError::new(format!("Failed to query_map: {err}")))
+            })?;
+
+        let mut res = Vec::new();
+        for booking in bookings {
+            match booking {
+                Ok(booking) => res.push(booking),
+                Err(err) => {
+                    return Err(Error::Internal(InternalError::new(format!(
+                        "Failed to map row: {err}"
+                    ))));
+                }
+            }
+        }
+        Ok(res)
     }
 }
 
