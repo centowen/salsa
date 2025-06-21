@@ -6,34 +6,29 @@ edition = "2024"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-askama = "0.12"
+askama = "0.14"
 async-session = "3"
 async-trait = "0.1.*"
 axum = { version = "0.8.*", features = ["json", "ws"] }
 axum-server = { version = "0.7.*", features = ["tls-rustls"] }
-chrono = { version = "0.4.2", features = ["serde"] }
-clap = { version = "4.1.6", features = ["derive", "env"] }
+chrono = { version = "0.4.*", features = ["serde"] }
+clap = { version = "4.*", features = ["derive", "env"] }
 deadpool-sqlite = { version = "0.10", features = ["rt_tokio_1"] }
 env_logger = "0.11.*"
-hex-literal = { version="0.4.*" }
-log = "0.4.17"
+hex-literal = "1.*"
+log = "0.4"
 oauth2 = "5.*"
 rand = "0.9.*"
 rand_distr = "0.5.*"
-refinery = { version = "0.8.16", features = ["rusqlite"] }
+refinery = { version = "0.8.*", features = ["rusqlite"] }
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
 rusqlite = { version = "0.33.0", features = ["bundled"] }
 rustfft="*"
-serde = {version = "1.0.145", features = ["derive"] }
-serde_json = "1.0.85"
+serde = {version = "1.*", features = ["derive"] }
+serde_json = "1.*"
 thiserror = "2.*"
-tokio = { version = "1.24.2", features = ["macros", "rt-multi-thread"] }
-tokio-util = { version = "0.7.7" }
-toml = "0.8"
+tokio = { version = "1.*", features = ["macros", "rt-multi-thread"] }
+tokio-util = "0.7.*"
+toml = "0.8.*"
 tower-http = { version = "0.6.*", features = ["full"] }
-uhd = "0.3.0"
-
-[dev-dependencies]
-hyper = "1.*"
-mime = "0.3.17"
-tower = "0.5.*"
+uhd = "0.3.*"
