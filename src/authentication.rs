@@ -46,13 +46,7 @@ pub async fn extract_session(
     debug!("Authenticating user session");
     let session = get_user_session(request.headers(), &state.store).await;
     trace!("Session get: {}", session.is_some());
-    if let Some(session) = session.clone() {
-        dbg!(session);
-    }
-    let user = match session.and_then(|s| {
-        dbg!(&s);
-        s.get::<i64>("user_id")
-    }) {
+    let user = match session.and_then(|s| s.get::<i64>("user_id")) {
         // TODO: InternalError -> Not logged in ... ok?
         Some(user_id) => {
             trace!("Got a user id from session");
@@ -302,7 +296,6 @@ async fn authenticate_from_discord(
         Some(User { id, .. }) => {
             info!("Logging in existing user");
             session.insert("user_id", id).expect("Memory store yo!");
-            dbg!(session);
             Ok((headers, Redirect::to("/")).into_response())
         }
         None => {
