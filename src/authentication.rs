@@ -1,4 +1,4 @@
-use std::{fmt::Display, fs::read_to_string, str, sync::Arc};
+use std::{fmt::Display, fs::read_to_string};
 
 use askama::Template;
 use async_session::{MemoryStore, Session, SessionStore};
@@ -22,24 +22,17 @@ use oauth2::{
         BasicTokenIntrospectionResponse, BasicTokenResponse,
     },
 };
-use rusqlite::{Connection, Result};
+use rusqlite::Result;
 use serde::Deserialize;
-use tokio::sync::Mutex;
 
-use crate::error::InternalError;
 use crate::index::render_main;
 use crate::user::User;
+use crate::{app::AppState, error::InternalError};
 
 const SESSION_COOKIE_NAME: &str = "session";
 
-#[derive(Clone)]
-pub struct AuthenticationState {
-    pub database_connection: Arc<Mutex<Connection>>,
-    pub store: MemoryStore,
-}
-
 pub async fn extract_session(
-    State(state): State<AuthenticationState>,
+    State(state): State<AppState>,
     mut request: Request,
     next: Next,
 ) -> Result<Response, StatusCode> {
@@ -68,16 +61,13 @@ pub async fn extract_session(
     Ok(next.run(request).await)
 }
 
-pub fn routes(database_connection: Arc<Mutex<Connection>>, store: MemoryStore) -> Router {
+pub fn routes(state: AppState) -> Router {
     Router::new()
         .route("/authorized", get(authenticate_from_discord))
         .route("/discord", get(redirect_to_discord))
         .route("/create_user", get(get_user))
         .route("/create_user", post(post_user))
-        .with_state(AuthenticationState {
-            database_connection,
-            store,
-        })
+        .with_state(state)
 }
 
 #[derive(Deserialize)]
@@ -134,7 +124,7 @@ fn create_oauth2_client() -> Result<DiscordClient, InternalError> {
 
 // 1. We redirect the user to Discord where they authorize our app.
 async fn redirect_to_discord(
-    State(state): State<AuthenticationState>,
+    State(state): State<AppState>,
 ) -> Result<impl IntoResponse, InternalError> {
     // To know that we're the originator of the request when the user comes back from Discord
     let (url, token) = create_oauth2_client()?
@@ -213,7 +203,7 @@ struct DiscordUser {
 async fn authenticate_from_discord(
     Query(query): Query<AuthRequest>,
     headers: HeaderMap,
-    State(state): State<AuthenticationState>,
+    State(state): State<AppState>,
 ) -> Result<Response, InternalError> {
     debug!("Coming back from Discord");
     let session = match get_user_session(&headers, &state.store).await {
@@ -343,7 +333,7 @@ async fn get_user_session(headers: &HeaderMap, store: &MemoryStore) -> Option<Se
 
 async fn get_user(
     headers: HeaderMap,
-    State(state): State<AuthenticationState>,
+    State(state): State<AppState>,
 ) -> Result<Response, InternalError> {
     let session = match get_user_session(&headers, &state.store).await {
         Some(session) => session,
@@ -376,7 +366,7 @@ struct WelcomeUser {
 }
 async fn post_user(
     headers: HeaderMap,
-    State(state): State<AuthenticationState>,
+    State(state): State<AppState>,
     Form(user_form): Form<UserForm>,
 ) -> Result<Response, InternalError> {
     let mut session = match get_user_session(&headers, &state.store).await {

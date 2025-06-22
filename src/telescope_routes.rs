@@ -1,5 +1,6 @@
+use crate::app::AppState;
 use crate::coords::Direction;
-use crate::telescope::{TelescopeCollectionHandle, TelescopeHandle};
+use crate::telescope::TelescopeHandle;
 use crate::telescopes::TelescopeStatus;
 use crate::telescopes::{TelescopeError, TelescopeInfo};
 use askama::Template;
@@ -15,21 +16,22 @@ use axum::{
 use tokio::time::Duration;
 use tokio_util::bytes::Bytes;
 
-pub fn routes(telescopes: TelescopeCollectionHandle) -> Router {
+pub fn routes(state: AppState) -> Router {
     let telescope_routes = Router::new()
         .route("/state", get(get_state))
         .route("/spectrum", any(spectrum_handle_upgrade));
     Router::new()
         .nest("/{telescope_id}", telescope_routes)
-        .with_state(telescopes)
+        .with_state(state)
 }
 
 async fn spectrum_handle_upgrade(
     upgrade: WebSocketUpgrade,
-    State(telescopes): State<TelescopeCollectionHandle>,
+    State(state): State<AppState>,
     Path(telescope_id): Path<String>,
 ) -> Result<impl IntoResponse, TelescopeNotFound> {
-    let telescope = telescopes
+    let telescope = state
+        .telescopes
         .get(&telescope_id)
         .await
         .ok_or(TelescopeNotFound)?;
@@ -91,14 +93,15 @@ impl From<TelescopeError> for TelescopeNotFound {
 }
 
 pub async fn get_state(
-    State(telescopes): State<TelescopeCollectionHandle>,
+    State(state): State<AppState>,
     Path(telescope_id): Path<String>,
 ) -> Result<impl IntoResponse, TelescopeNotFound> {
-    let telescope = telescopes
+    let telescope = state
+        .telescopes
         .get(&telescope_id)
         .await
         .ok_or(TelescopeNotFound)?;
-    Ok(Html(state(telescope).await?))
+    Ok(Html(telescope_state(telescope).await?))
 }
 
 #[derive(Template)]
@@ -109,7 +112,7 @@ struct TelescopeStateTemplate {
     direction: Direction,
 }
 
-pub async fn state(telescope: TelescopeHandle) -> Result<String, TelescopeError> {
+pub async fn telescope_state(telescope: TelescopeHandle) -> Result<String, TelescopeError> {
     let info = telescope.get_info().await?;
     Ok(TelescopeStateTemplate {
         info: info.clone(),

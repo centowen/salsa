@@ -1,5 +1,5 @@
+use crate::app::AppState;
 use crate::bookings::Booking;
-use crate::database::{DataBase, Storage};
 use crate::index::render_main;
 use crate::template::HtmlTemplate;
 use crate::user::User;
@@ -11,10 +11,10 @@ use axum::{Router, extract::State, http::StatusCode, routing::get};
 use chrono::{DateTime, Duration, NaiveDate, NaiveDateTime, NaiveTime, TimeZone, Utc};
 use serde::Deserialize;
 
-pub fn routes(database: DataBase<impl Storage + 'static>) -> Router {
+pub fn routes(state: AppState) -> Router {
     Router::new()
         .route("/", get(get_bookings).post(create_booking))
-        .with_state(database)
+        .with_state(state)
 }
 
 struct MyBooking {
@@ -30,15 +30,13 @@ struct BookingsTemplate {
     telescope_names: Vec<String>,
 }
 
-async fn get_bookings<StorageType>(
+async fn get_bookings(
     Extension(user): Extension<Option<User>>,
     headers: HeaderMap,
-    State(db): State<DataBase<StorageType>>,
-) -> impl IntoResponse
-where
-    StorageType: Storage,
-{
-    let data_model = db
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    let data_model = state
+        .database
         .get_data()
         .await
         .expect("As long as no one is manually editing the database, this should never fail.");
@@ -84,14 +82,11 @@ struct BookingForm {
     duration: i64,
 }
 
-async fn create_booking<StorageType>(
+async fn create_booking(
     Extension(user): Extension<Option<User>>,
-    State(db): State<DataBase<StorageType>>,
+    State(state): State<AppState>,
     Form(booking_form): Form<BookingForm>,
-) -> Response
-where
-    StorageType: Storage,
-{
+) -> Response {
     if user.is_none() {
         return StatusCode::UNAUTHORIZED.into_response();
     }
@@ -108,7 +103,8 @@ where
         telescope_name: booking_form.telescope,
     };
     let mut skip = false;
-    if db
+    if state
+        .database
         .get_data()
         // Error handling!
         .await
@@ -124,15 +120,18 @@ where
     }
 
     if !skip {
-        db.update_data(|mut data_model| {
-            data_model.bookings.push(booking);
-            data_model
-        })
-        .await
-        .expect("failed to insert item into db")
+        state
+            .database
+            .update_data(|mut data_model| {
+                data_model.bookings.push(booking);
+                data_model
+            })
+            .await
+            .expect("failed to insert item into db")
     }
 
-    let data_model = db
+    let data_model = state
+        .database
         .get_data()
         .await
         .expect("As long as no one is manually editing the database, this should never fail.");
