@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use thiserror::Error;
 use tokio::fs;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::AsyncReadExt;
 use tokio::sync::RwLock;
 
 #[derive(Debug, Error)]
@@ -28,7 +28,6 @@ pub enum DataBaseError {
 #[async_trait]
 pub trait Storage: Sized + Clone + Send + Sync {
     async fn read(&self) -> Result<Option<Vec<u8>>, DataBaseError>;
-    async fn write(&mut self, data: &[u8]) -> Result<(), DataBaseError>;
 }
 
 #[derive(Debug, Clone)]
@@ -44,11 +43,6 @@ impl Storage for InMemoryStorage {
         }
         Ok(Some(self.data.clone()))
     }
-
-    async fn write(&mut self, data: &[u8]) -> Result<(), DataBaseError> {
-        self.data = data.to_vec();
-        Ok(())
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -63,12 +57,6 @@ impl Storage for FileStorage {
         let mut data = Vec::new();
         file.read_to_end(&mut data).await?;
         Ok(Some(data))
-    }
-
-    async fn write(&mut self, data: &[u8]) -> Result<(), DataBaseError> {
-        let mut file = fs::File::create(&self.file_path).await?;
-        file.write_all(data).await?;
-        Ok(())
     }
 }
 
@@ -178,46 +166,10 @@ where
             None => Ok(DataModel::default()),
         }
     }
-
-    /// Locks the database for writing and runs the supplied function on the
-    /// data.
-    ///
-    /// The function has mutable access to the data. After it returns, any
-    /// changes made to data are written to the database file (if any).
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use backend::database::{DataBase, create_in_memory_database};
-    ///
-    /// ## let booking = Booking { id: 42, ..Default::default()}
-    /// let db = create_in_memory_database();
-    /// db.update_data(|mut datamodel| datamodel.bookings.push(booking)).await.unwrap();
-    /// let data = db.get_data().await.unwrap();
-    /// assert_eq!(data, DataModel{bookings: vec![booking], ..Default::default()});
-    /// ```
-    pub async fn update_data<F>(&self, f: F) -> Result<(), DataBaseError>
-    where
-        F: FnOnce(DataModel) -> DataModel,
-    {
-        let mut storage_handle = self.storage.write().await;
-
-        let value = match storage_handle.read().await? {
-            Some(data) => serde_json::from_slice(&data)?,
-            None => DataModel::default(),
-        };
-
-        let value = f(value);
-        let data = serde_json::to_vec(&value)?;
-        storage_handle.write(&data).await?;
-
-        Ok(())
-    }
 }
 
 #[cfg(test)]
 mod test {
-    use chrono::{Duration, Utc};
 
     use super::*;
 
@@ -226,55 +178,5 @@ mod test {
         let db = create_in_memory_database();
         let data = db.get_data().await.expect("should be able to get db data");
         assert_eq!(DataModel::default(), data);
-    }
-
-    #[tokio::test]
-    async fn test_get_data() {
-        let booking = Booking {
-            start_time: Utc::now(),
-            end_time: Utc::now() + Duration::hours(1),
-            telescope_name: "test".to_string(),
-            user_name: "test".to_string(),
-        };
-        let db = create_in_memory_database();
-        db.update_data(|mut data_model| {
-            data_model.bookings.push(booking.clone());
-            data_model
-        })
-        .await
-        .expect("should be able to set db data");
-        let data = db.get_data().await.expect("should be able to get db data");
-        assert_eq!(data.bookings, vec![booking]);
-    }
-
-    #[tokio::test]
-    async fn test_update_data() {
-        let booking1 = Booking {
-            start_time: Utc::now(),
-            end_time: Utc::now() + Duration::hours(1),
-            telescope_name: "test1".to_string(),
-            user_name: "test".to_string(),
-        };
-        let booking2 = Booking {
-            start_time: Utc::now(),
-            end_time: Utc::now() + Duration::hours(1),
-            telescope_name: "test2".to_string(),
-            user_name: "test".to_string(),
-        };
-        let db = create_in_memory_database();
-        db.update_data(|mut data_model| {
-            data_model.bookings.push(booking1.clone());
-            data_model
-        })
-        .await
-        .expect("should be able to set db data");
-        db.update_data(|mut data_model| {
-            data_model.bookings.push(booking2.clone());
-            data_model
-        })
-        .await
-        .expect("should be able to set db data");
-        let data = db.get_data().await.expect("should be able to get db data");
-        assert_eq!(data.bookings, vec![booking1, booking2]);
     }
 }
