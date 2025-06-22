@@ -50,7 +50,7 @@ impl Booking {
         let conn = connection.lock().await;
         let mut stmt = conn
             .prepare(
-                "select start_timestamp, end_timestamp, telescope_id, name
+                "select start_timestamp, end_timestamp, telescope_id, username
                         from booking, user
                         where booking.user_id = user.id",
             )
