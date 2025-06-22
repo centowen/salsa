@@ -1,8 +1,8 @@
+use crate::app::AppState;
 use crate::bookings::Booking;
-use crate::database::{DataBase, Storage};
 use crate::index::render_main;
-use crate::telescope::{TelescopeCollectionHandle, TelescopeHandle};
-use crate::telescope_routes::state;
+use crate::telescope::TelescopeHandle;
+use crate::telescope_routes::telescope_state;
 use crate::telescopes::{
     ReceiverConfiguration, ReceiverError, TelescopeError, TelescopeInfo, TelescopeTarget,
 };
@@ -20,26 +20,14 @@ use axum::{
 use chrono::Utc;
 use serde::Deserialize;
 
-#[derive(Clone)]
-struct ObserveState<StorageType: Storage> {
-    telescopes: TelescopeCollectionHandle,
-    database: DataBase<StorageType>,
-}
-
-pub fn routes(
-    telescopes: TelescopeCollectionHandle,
-    database: DataBase<impl Storage + 'static>,
-) -> Router {
+pub fn routes(state: AppState) -> Router {
     let observe_routes = Router::new()
         .route("/", get(get_observe))
         .route("/set-target", post(set_target))
         .route("/observe", post(start_observe));
     Router::new()
         .nest("/{telescope_id}", observe_routes)
-        .with_state(ObserveState {
-            telescopes,
-            database,
-        })
+        .with_state(state)
 }
 
 #[derive(Deserialize, Debug)]
@@ -102,14 +90,11 @@ fn error_response(message: String) -> Response {
         .expect("Building a response should never fail")
 }
 
-async fn set_target<StorageType>(
-    State(state): State<ObserveState<StorageType>>,
+async fn set_target(
+    State(state): State<AppState>,
     Path(telescope_id): Path<String>,
     Form(target): Form<Target>,
-) -> Result<impl IntoResponse, ObserveError>
-where
-    StorageType: Storage,
-{
+) -> Result<impl IntoResponse, ObserveError> {
     let x_rad = target.x.to_radians();
     let y_rad = target.y.to_radians();
     let target = match target.coordinate_system.as_str() {
@@ -143,13 +128,10 @@ where
     Ok(Html(content))
 }
 
-async fn start_observe<StorageType>(
-    State(state): State<ObserveState<StorageType>>,
+async fn start_observe(
+    State(state): State<AppState>,
     Path(telescope_id): Path<String>,
-) -> Result<impl IntoResponse, ObserveError>
-where
-    StorageType: Storage,
-{
+) -> Result<impl IntoResponse, ObserveError> {
     let mut telescope = state
         .telescopes
         .get(&telescope_id)
@@ -175,15 +157,12 @@ fn has_active_booking(user: &User, bookings: &[Booking]) -> bool {
     false
 }
 
-async fn get_observe<StorageType>(
+async fn get_observe(
     Extension(user): Extension<Option<User>>,
-    State(state): State<ObserveState<StorageType>>,
+    State(state): State<AppState>,
     Path(telescope_id): Path<String>,
     headers: HeaderMap,
-) -> Result<impl IntoResponse, ObserveError>
-where
-    StorageType: Storage,
-{
+) -> Result<impl IntoResponse, ObserveError> {
     let data_model = state
         .database
         .get_data()
@@ -255,7 +234,7 @@ async fn observe(telescope: TelescopeHandle) -> Result<String, TelescopeError> {
         ),
         TelescopeTarget::Parked => (String::new(), String::new()),
     };
-    let state_html = state(telescope.clone()).await?;
+    let state_html = telescope_state(telescope.clone()).await?;
     Ok(ObserveTemplate {
         info,
         target_mode,

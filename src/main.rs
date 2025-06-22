@@ -1,15 +1,8 @@
-use async_session::MemoryStore;
-use authentication::{AuthenticationState, extract_session};
-use axum::{Router, middleware, routing::get};
 use axum_server::tls_rustls::RustlsConfig;
 use clap::Parser;
-use database::{create_database_from_directory, create_sqlite_database_on_disk};
-use std::{net::SocketAddr, sync::Arc};
-use telescope::create_telescope_collection;
-use tokio::sync::Mutex;
-use tower_http::services::ServeDir;
-use tower_http::trace::TraceLayer;
+use std::net::SocketAddr;
 
+mod app;
 mod authentication;
 mod bookings;
 mod coords;
@@ -44,48 +37,9 @@ async fn main() {
 
     let args = Args::parse();
 
-    let database = create_database_from_directory("database.json")
-        .await
-        .expect("failed to create database");
-
-    let database_connection = Arc::new(Mutex::new(
-        create_sqlite_database_on_disk("database.sqlite3")
-            .expect("failed to create sqlite database"),
-    ));
-
-    let telescopes = create_telescope_collection(&database)
-        .await
-        .expect("failed to create telescopes");
-
     let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
 
-    let store = MemoryStore::new();
-
-    let mut app = Router::new()
-        .route("/", get(index::get_index))
-        .nest(
-            "/auth",
-            authentication::routes(database_connection.clone(), store.clone()),
-        )
-        .nest(
-            "/observe",
-            observe_routes::routes(telescopes.clone(), database.clone()),
-        )
-        .nest("/bookings", bookings::routes::routes(database.clone()))
-        .nest("/telescope", telescope_routes::routes(telescopes.clone()))
-        .layer(TraceLayer::new_for_http())
-        .route_layer(middleware::from_fn_with_state(
-            AuthenticationState {
-                database_connection,
-                store,
-            },
-            extract_session,
-        ));
-
-    let assets_path = "assets";
-    log::info!("serving asserts from {}", assets_path);
-    let assets_service = ServeDir::new(assets_path);
-    app = app.fallback_service(assets_service);
+    let app = app::create_app().await;
 
     log::info!("listening on {}", addr);
     if let Some(key_file_path) = args.key_file_path {
