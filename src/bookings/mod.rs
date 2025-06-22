@@ -28,19 +28,14 @@ impl Booking {
         telescope_id: String,
         start: DateTime<Utc>,
         end: DateTime<Utc>,
-    ) -> Result<Booking, Error> {
-        // KNARK: Check overlap first!
+    ) -> Result<Booking, InternalError> {
         let conn = connection.lock().await;
         conn.execute(
             "insert into booking (user_id, telescope_id, start_timestamp, end_timestamp)
                  values ((?1), (?2), (?3), (?4))",
             (&user.id, &telescope_id, start.timestamp(), end.timestamp()),
         )
-        .map_err(|err| {
-            Error::Internal(InternalError::new(format!(
-                "Failed to insert user in db: {err}"
-            )))
-        })?;
+        .map_err(|err| InternalError::new(format!("Failed to insert user in db: {err}")))?;
         Ok(Booking {
             start_time: start,
             end_time: end,
@@ -49,7 +44,9 @@ impl Booking {
         })
     }
 
-    pub async fn fetch_all(connection: Arc<Mutex<Connection>>) -> Result<Vec<Booking>, Error> {
+    pub async fn fetch_all(
+        connection: Arc<Mutex<Connection>>,
+    ) -> Result<Vec<Booking>, InternalError> {
         let conn = connection.lock().await;
         let mut stmt = conn
             .prepare(
@@ -57,11 +54,7 @@ impl Booking {
                         from booking, user
                         where booking.user_id = user.id",
             )
-            .map_err(|err| {
-                Error::Internal(InternalError::new(format!(
-                    "Failed to prepare statement: {err}"
-                )))
-            })?;
+            .map_err(|err| InternalError::new(format!("Failed to prepare statement: {err}")))?;
         let bookings = stmt
             .query_map([], |row| {
                 Ok(Booking {
@@ -71,18 +64,14 @@ impl Booking {
                     user_name: row.get(3)?,
                 })
             })
-            .map_err(|err| {
-                Error::Internal(InternalError::new(format!("Failed to query_map: {err}")))
-            })?;
+            .map_err(|err| InternalError::new(format!("Failed to query_map: {err}")))?;
 
         let mut res = Vec::new();
         for booking in bookings {
             match booking {
                 Ok(booking) => res.push(booking),
                 Err(err) => {
-                    return Err(Error::Internal(InternalError::new(format!(
-                        "Failed to map row: {err}"
-                    ))));
+                    return Err(InternalError::new(format!("Failed to map row: {err}")));
                 }
             }
         }
@@ -94,9 +83,4 @@ impl Booking {
 pub enum AddBookingError {
     ServiceUnavailable,
     Conflict,
-}
-
-pub enum Error {
-    Internal(InternalError),
-    CouldNotCreateBooking,
 }

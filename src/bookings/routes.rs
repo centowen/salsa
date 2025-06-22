@@ -1,7 +1,7 @@
 use crate::app::AppState;
 use crate::bookings::Booking;
+use crate::error::InternalError;
 use crate::index::render_main;
-use crate::template::HtmlTemplate;
 use crate::user::User;
 use askama::Template;
 use axum::http::HeaderMap;
@@ -34,13 +34,8 @@ async fn get_bookings(
     Extension(user): Extension<Option<User>>,
     headers: HeaderMap,
     State(state): State<AppState>,
-) -> impl IntoResponse {
-    let data_model = state
-        .database
-        .get_data()
-        .await
-        .expect("As long as no one is manually editing the database, this should never fail.");
-    let bookings = data_model.bookings;
+) -> Result<Response, InternalError> {
+    let bookings = Booking::fetch_all(state.database_connection).await?;
     let now = Utc::now();
     let my_bookings = match user {
         Some(ref user) => bookings
@@ -54,6 +49,12 @@ async fn get_bookings(
             .collect(),
         None => Vec::new(),
     };
+
+    let data_model = state
+        .database
+        .get_data()
+        .await
+        .expect("As long as no one is manually editing the database, this should never fail.");
     let telescope_names: Vec<String> = data_model
         .telescopes
         .iter()
@@ -71,7 +72,7 @@ async fn get_bookings(
     } else {
         render_main(user, content)
     };
-    Html(content).into_response()
+    Ok(Html(content).into_response())
 }
 
 #[derive(Deserialize, Debug)]
@@ -84,11 +85,12 @@ struct BookingForm {
 
 async fn create_booking(
     Extension(user): Extension<Option<User>>,
+    headers: HeaderMap,
     State(state): State<AppState>,
     Form(booking_form): Form<BookingForm>,
-) -> Response {
+) -> Result<Response, InternalError> {
     if user.is_none() {
-        return StatusCode::UNAUTHORIZED.into_response();
+        return Ok(StatusCode::UNAUTHORIZED.into_response());
     }
     let user = user.unwrap();
 
@@ -102,60 +104,22 @@ async fn create_booking(
         user_name: user.name.clone(),
         telescope_name: booking_form.telescope,
     };
-    let mut skip = false;
-    if state
-        .database
-        .get_data()
-        // Error handling!
-        .await
-        .expect("Failed to get data")
-        .bookings
+    // TODO: Do the overlap check in the database instead.
+    let bookings = Booking::fetch_all(state.database_connection.clone()).await?;
+    if !bookings
         .iter()
         .filter(|b| b.telescope_name == booking.telescope_name && b.overlaps(&booking))
         .any(|_| true)
     {
-        // There is already a booking of the selected telescope overlapping
-        // with the new booking. The new booking must be rejected.
-        skip = true;
+        Booking::create(
+            state.database_connection.clone(),
+            user.clone(),
+            booking.telescope_name,
+            booking.start_time,
+            booking.end_time,
+        )
+        .await?;
     }
 
-    if !skip {
-        state
-            .database
-            .update_data(|mut data_model| {
-                data_model.bookings.push(booking);
-                data_model
-            })
-            .await
-            .expect("failed to insert item into db")
-    }
-
-    let data_model = state
-        .database
-        .get_data()
-        .await
-        .expect("As long as no one is manually editing the database, this should never fail.");
-    let bookings = data_model.bookings;
-    let now = Utc::now();
-    let my_bookings = bookings
-        .iter()
-        .filter(|b| b.user_name == user.name)
-        .cloned()
-        .map(|b| MyBooking {
-            inner: b.clone(),
-            active: now > b.start_time && now < b.end_time,
-        })
-        .collect();
-    let telescope_names: Vec<String> = data_model
-        .telescopes
-        .iter()
-        .map(|t| t.name.clone())
-        .collect();
-
-    HtmlTemplate(BookingsTemplate {
-        my_bookings,
-        bookings,
-        telescope_names,
-    })
-    .into_response()
+    get_bookings(Extension(Some(user)), headers, State(state)).await
 }
