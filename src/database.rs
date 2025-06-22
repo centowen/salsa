@@ -83,17 +83,17 @@ where
 #[derive(Debug, Error)]
 pub enum SqliteDatabaseError {
     #[error("Could not open database: {source}")]
-    RusqliteError {
+    Rusqlite {
         #[from]
         source: rusqlite::Error,
     },
     #[error("Could not setup database connection pool: {source}")]
-    CreatePoolError {
+    CreatePool {
         #[from]
         source: CreatePoolError,
     },
     #[error("Could not setup database connection pool: {source}")]
-    PoolError {
+    Pool {
         #[from]
         source: PoolError,
     },
