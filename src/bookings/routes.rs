@@ -50,20 +50,10 @@ async fn get_bookings(
         None => Vec::new(),
     };
 
-    let data_model = state
-        .database
-        .get_data()
-        .await
-        .expect("As long as no one is manually editing the database, this should never fail.");
-    let telescope_names: Vec<String> = data_model
-        .telescopes
-        .iter()
-        .map(|t| t.name.clone())
-        .collect();
     let content = BookingsTemplate {
         my_bookings,
         bookings,
-        telescope_names,
+        telescope_names: state.telescopes.get_names(),
     }
     .render()
     .expect("Template rendering should always succeed");

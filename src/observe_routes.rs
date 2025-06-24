@@ -1,5 +1,6 @@
 use crate::app::AppState;
 use crate::bookings::Booking;
+use crate::error::InternalError;
 use crate::index::render_main;
 use crate::telescope::TelescopeHandle;
 use crate::telescope_routes::telescope_state;
@@ -41,6 +42,7 @@ enum ObserveError {
     BadQuery(String),
     TelescopeError(TelescopeError),
     ReceiverError(ReceiverError),
+    InternalError(InternalError),
     TelescopeNotFound(String),
 }
 
@@ -53,6 +55,7 @@ impl IntoResponse for ObserveError {
                 error_response(format!("Could not find telescope {}", id))
             }
             ObserveError::ReceiverError(receiver_error) => receiver_error.into_response(),
+            ObserveError::InternalError(internal_error) => internal_error.into_response(),
         }
     }
 }
@@ -72,6 +75,12 @@ impl IntoResponse for TelescopeError {
 impl From<ReceiverError> for ObserveError {
     fn from(receiver_error: ReceiverError) -> Self {
         ObserveError::ReceiverError(receiver_error)
+    }
+}
+
+impl From<InternalError> for ObserveError {
+    fn from(internal_error: InternalError) -> Self {
+        ObserveError::InternalError(internal_error)
     }
 }
 
@@ -163,12 +172,7 @@ async fn get_observe(
     Path(telescope_id): Path<String>,
     headers: HeaderMap,
 ) -> Result<impl IntoResponse, ObserveError> {
-    let data_model = state
-        .database
-        .get_data()
-        .await
-        .expect("As long as no one is manually editing the database, this should never fail.");
-    let bookings = data_model.bookings;
+    let bookings = Booking::fetch_all(state.database_connection).await?;
     if user.is_none() || !has_active_booking(user.as_ref().unwrap(), &bookings) {
         let content = DontObserveTemplate {}
             .render()
