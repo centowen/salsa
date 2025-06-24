@@ -1,10 +1,10 @@
-use std::{fmt::Display, fs::read_to_string};
+use std::{collections::HashMap, fmt::Display, fs::read_to_string};
 
 use askama::Template;
 use async_session::{MemoryStore, Session, SessionStore};
 use axum::{
     Form, Router,
-    extract::{Query, Request, State},
+    extract::{Path, Query, Request, State},
     http::{
         HeaderMap, StatusCode,
         header::{COOKIE, SET_COOKIE},
@@ -13,7 +13,7 @@ use axum::{
     response::{Html, IntoResponse, Redirect, Response},
     routing::{get, post},
 };
-use log::{debug, info, trace};
+use log::{debug, info, trace, warn};
 use oauth2::{
     AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken, EndpointNotSet, EndpointSet,
     RedirectUrl, Scope, StandardRevocableToken, TokenResponse, TokenUrl,
@@ -22,8 +22,10 @@ use oauth2::{
         BasicTokenIntrospectionResponse, BasicTokenResponse,
     },
 };
+use reqwest::header::USER_AGENT;
 use rusqlite::Result;
 use serde::Deserialize;
+use serde_json::{Map, Value};
 
 use crate::index::render_main;
 use crate::user::User;
@@ -63,53 +65,67 @@ pub async fn extract_session(
 
 pub fn routes(state: AppState) -> Router {
     Router::new()
-        .route("/authorized", get(authenticate_from_discord))
-        .route("/discord", get(redirect_to_discord))
+        .route("/authorized", get(authenticate_from_oauth2))
         .route("/create_user", get(get_user))
         .route("/create_user", post(post_user))
+        .route("/login", get(login))
+        .route("/redirect/{provider_name}", get(redirect_to_auth_provider))
         .with_state(state)
 }
 
 #[derive(Deserialize)]
 struct Secrets {
-    discord: ClientSecrets,
+    auth_provider: HashMap<String, Provider>,
 }
 
-#[derive(Deserialize)]
-struct ClientSecrets {
+#[derive(Deserialize, Clone)]
+struct Provider {
+    auth_uri: String,
+    token_uri: String,
+    redirect_uri: String,
+    user_uri: String,
+    display_name_field: String,
     client_id: String,
     client_secret: String,
 }
 
-fn read_discord_secrets() -> Result<ClientSecrets, InternalError> {
+fn read_auth_providers() -> Result<HashMap<String, Provider>, InternalError> {
     let filename = ".secrets.toml";
     let contents = read_to_string(filename)
         .map_err(|err| InternalError::new(format!("Failed to read from '{filename}': {err}")))?;
     let secrets: Secrets = toml::from_str(&contents).map_err(|err| {
         InternalError::new(format!("Failed to parse toml from {filename}: {err}"))
     })?;
-    Ok(secrets.discord)
+    Ok(secrets.auth_provider)
 }
 
-fn create_oauth2_client() -> Result<DiscordClient, InternalError> {
-    // TODO: Don't read the secrets from disc all the time probably...
-    let ClientSecrets {
-        client_id,
-        client_secret,
-    } = read_discord_secrets()?;
-    let client = BasicClient::new(ClientId::new(client_id.to_string()))
-        .set_client_secret(ClientSecret::new(client_secret.to_string()))
+fn read_auth_provider(provider_name: &str) -> Result<Provider, InternalError> {
+    let auth_providers = read_auth_providers()?;
+    let Some(auth_provider) = auth_providers.get(provider_name) else {
+        return Err(InternalError::new(format!(
+            "No provider with name {provider_name} configured"
+        )));
+    };
+    Ok(auth_provider.clone())
+}
+
+fn create_oauth2_client_specific_provider(
+    provider_name: &str,
+) -> Result<OAuthClient, InternalError> {
+    // TODO: Don't read the secrets from disk all the time probably...
+    let auth_provider = read_auth_provider(provider_name)?;
+    let client = BasicClient::new(ClientId::new(auth_provider.client_id.clone()))
+        .set_client_secret(ClientSecret::new(auth_provider.client_secret.clone()))
         .set_auth_uri(
-            AuthUrl::new("https://discord.com/api/oauth2/authorize?response_type=code".to_string())
-                .expect("Hardcoded URL should always work"),
+            AuthUrl::new(auth_provider.auth_uri.clone()).expect("Hardcoded URL should always work"),
         )
         // TODO: This url should be retrieved from where we are deployed.
         .set_redirect_uri(
-            RedirectUrl::new("http://127.0.0.1:3000/auth/authorized".to_string())
+            RedirectUrl::new(auth_provider.redirect_uri.clone())
                 .expect("Hardcoded URL should always work."),
         )
         .set_token_uri(
-            TokenUrl::new("https://discord.com/api/oauth2/token".to_string())
+            TokenUrl::new(auth_provider.token_uri.clone())
                 .expect("Hardcoded URL should always work."),
         );
     Ok(client)
@@ -117,17 +133,36 @@ fn create_oauth2_client() -> Result<DiscordClient, InternalError> {
 
 // Basic Oath2 flow
 //
-// 1. User is redirected to Discord.
-// 2. User comes back with an authorization code.
-// 3. We use that code to request an authorization token from Discord.
-// 4. We use the token to get the identity of the user from Discord.
+// 1. User is prompted to select oauth2 provider.
+// 2. User is redirected to OAuth2 provider.
+// 3. User comes back with an authorization code.
+// 4. We use that code to request an authorization token from oauth2 provider.
+// 5. We use the token to get the identity of the user from oauth2 provider.
 
-// 1. We redirect the user to Discord where they authorize our app.
-async fn redirect_to_discord(
+#[derive(Template)]
+#[template(path = "login.html")]
+struct SelectAuthProvider {
+    provider_names: Vec<String>,
+}
+
+// 1. User is prompted to select oauth2 provider.
+async fn login() -> Result<impl IntoResponse, InternalError> {
+    let auth_providers = read_auth_providers()?;
+    let mut provider_names: Vec<_> = auth_providers.keys().cloned().collect();
+    provider_names.sort();
+    let content = SelectAuthProvider { provider_names }
+        .render()
+        .expect("Template rendering should always succeed");
+    Ok(Html(render_main(None, content)))
+}
+
+// 2. We redirect the user to auth provider (e.g. Discord) where they authorize our app.
+async fn redirect_to_auth_provider(
+    Path(provider): Path<String>,
     State(state): State<AppState>,
 ) -> Result<impl IntoResponse, InternalError> {
-    // To know that we're the originator of the request when the user comes back from Discord
-    let (url, token) = create_oauth2_client()?
+    // To know that we're the originator of the request when the user comes back from OAuth2 provider
+    let (url, token) = create_oauth2_client_specific_provider(&provider)?
         .authorize_url(CsrfToken::new_random)
         .add_scope(Scope::new("identify".to_string()))
         .add_extra_param("prompt".to_string(), "none".to_string())
@@ -136,6 +171,9 @@ async fn redirect_to_discord(
     let mut session = Session::new();
     session
         .insert("csrf_token", &token)
+        .expect("Data created entirely by us");
+    session
+        .insert("provider", &provider)
         .expect("Data created entirely by us");
     let cookie = state
         .store
@@ -151,7 +189,7 @@ async fn redirect_to_discord(
         cookie.parse().expect("Cookie should be parseable always."),
     );
 
-    info!("Sending user to Discord to authenticate");
+    info!("Sending user to {provider} to authenticate");
 
     Ok((headers, Redirect::to(url.as_ref())))
 }
@@ -172,7 +210,7 @@ impl Display for CsrfError {
 }
 
 fn validate_csrf_token(
-    session: Session,
+    session: &Session,
     user_supplied_token: String,
 ) -> std::result::Result<(), CsrfError> {
     if let Some(session_token) = session.get::<String>("csrf_token") {
@@ -189,23 +227,13 @@ fn validate_csrf_token(
     }
 }
 
-#[derive(Debug, Deserialize)]
-struct DiscordUser {
-    id: String,
-    #[allow(dead_code)] // We don't use this.
-    avatar: Option<String>,
-    username: String,
-    #[allow(dead_code)] // We don't use this.
-    discriminator: String,
-}
-
-// 2. User comes back with an authorization code.
-async fn authenticate_from_discord(
+// 3. User comes back with an authorization code.
+async fn authenticate_from_oauth2(
     Query(query): Query<AuthRequest>,
     headers: HeaderMap,
     State(state): State<AppState>,
 ) -> Result<Response, InternalError> {
-    debug!("Coming back from Discord");
+    debug!("Coming back from OAuth2 provider");
     let session = match get_user_session(&headers, &state.store).await {
         Some(session) => session,
         None => {
@@ -213,26 +241,31 @@ async fn authenticate_from_discord(
             return Ok(StatusCode::UNAUTHORIZED.into_response());
         }
     };
-    if let Err(err) = validate_csrf_token(session, query.state) {
-        debug!("Failed to validate CSRF token from Discord: {err}");
+    if let Err(err) = validate_csrf_token(&session, query.state) {
+        debug!("Failed to validate CSRF token from oauth2 provider: {err}");
         // This realistically happens because of an old or bogus request
         // to this endpoint. Returning 401 is reasonable.
         return Ok(StatusCode::UNAUTHORIZED.into_response());
     }
 
-    // 3. We use that code to request an authorization token from Discord.
+    let Some(provider_name) = session.get::<String>("provider") else {
+        warn!("No provider set in the session, unabled to use code");
+        return Ok(StatusCode::UNAUTHORIZED.into_response());
+    };
+
+    // 4. We use that code to request an authorization token from oauth2 provider.
     let http_client = reqwest::ClientBuilder::new()
         .redirect(reqwest::redirect::Policy::none())
         .build()
         .expect("Hardcoded client should always build.");
-    let token = match create_oauth2_client()?
+    let token = match create_oauth2_client_specific_provider(&provider_name)?
         .exchange_code(AuthorizationCode::new(query.code.clone()))
         .request_async(&http_client)
         .await
     {
         Ok(token) => token,
         Err(err) => {
-            debug!("Failed to get token from Discord: {err}");
+            debug!("Failed to get token from {provider_name}: {err}");
             // This realistically happens because of an old or bogus request
             // to this endpoint. Returning 401 is reasonable.
             return Ok(StatusCode::UNAUTHORIZED.into_response());
@@ -241,20 +274,48 @@ async fn authenticate_from_discord(
 
     debug!("Code authenticated");
 
-    // 4. We use the token to get the identity of the user from Discord.
-    let user_data: DiscordUser = http_client
-        .get("https://discordapp.com/api/users/@me")
+    let provider = read_auth_provider(&provider_name)?;
+    // 5. We use the token to get the identity of the user from oauth2 provider.
+    let user_data: Map<String, Value> = http_client
+        .get(&provider.user_uri)
+        .header(USER_AGENT, "salsa/1.0.0")
         .bearer_auth(token.access_token().secret())
         .send()
         .await
-        .map_err(|err| InternalError::new(format!("Failed to fetch token from Discord: {err}")))?
-        .json::<DiscordUser>()
+        .map_err(|err| {
+            InternalError::new(format!("Failed to fetch token from {provider_name}: {err}"))
+        })?
+        .json::<Map<String, Value>>()
         .await
         .map_err(|err| {
-            InternalError::new(format!("Failed to deserialize token from Discord: {err}"))
+            InternalError::new(format!(
+                "Failed to deserialize user from {provider_name}: {err}"
+            ))
         })?;
 
-    let user = User::fetch_with_discord_id(state.database_connection, user_data.id.clone()).await?;
+    let user_id = match user_data.get("id") {
+        Some(Value::Number(user_id)) => format!("{}", user_id),
+        Some(Value::String(user_id)) => user_id.clone(),
+        None => {
+            return Err(InternalError::new(format!(
+                "No id field in user object returned from {}",
+                &provider.user_uri
+            )));
+        }
+        _ => {
+            return Err(InternalError::new(format!(
+                "Id field in user object returned from {} had unexpected type",
+                &provider.user_uri
+            )));
+        }
+    };
+
+    let user = User::fetch_with_user_with_external_id(
+        state.database_connection,
+        provider_name.clone(),
+        &user_id,
+    )
+    .await?;
 
     let cookie = state
         .store
@@ -290,11 +351,23 @@ async fn authenticate_from_discord(
         }
         None => {
             debug!("Redirecting to create new user");
+            let Some(username) = user_data
+                .get(&provider.display_name_field)
+                .map(|username| username.as_str())
+            else {
+                return Err(InternalError::new(format!(
+                    "No {} field in user object returned from {}",
+                    &provider.display_name_field, &provider.user_uri
+                )));
+            };
             session
-                .insert("discord_id", &user_data.id)
+                .insert("external_id", user_id)
                 .expect("MemoryStore should work every time");
             session
-                .insert("discord_username", &user_data.username)
+                .insert("provider_name", provider_name)
+                .expect("MemoryStore should work every time");
+            session
+                .insert("user_display_name", username)
                 .expect("MemoryStore should work every time");
             Ok((headers, Redirect::to("create_user")).into_response())
         }
@@ -340,8 +413,8 @@ async fn get_user(
         None => return Ok(StatusCode::UNAUTHORIZED.into_response()),
     };
     let content = DisplayUser {
-        username: session.get("discord_username").ok_or_else(|| {
-            InternalError::new("Failed to get Discord username from session".to_string())
+        username: session.get("user_display_name").ok_or_else(|| {
+            InternalError::new("Failed to get user_display_name from session".to_string())
         })?,
     }
     .render()
@@ -373,16 +446,25 @@ async fn post_user(
         Some(session) => session,
         None => return Ok(StatusCode::UNAUTHORIZED.into_response()),
     };
-    let discord_id: String = session
-        .get("discord_id")
-        .ok_or_else(|| InternalError::new("No discord_id in session".to_string()))?;
+    let provider_name: String = session
+        .get("provider_name")
+        .ok_or_else(|| InternalError::new("No provider_name in session".to_string()))?;
+    let external_id: String = session
+        .get("external_id")
+        .ok_or_else(|| InternalError::new("No external_id in session".to_string()))?;
 
     let username = user_form.username;
 
-    let user =
-        User::create_from_discord(state.database_connection, username.clone(), discord_id).await?;
+    let user = User::create_from_external(
+        state.database_connection,
+        username.clone(),
+        provider_name.clone(),
+        &external_id,
+    )
+    .await?;
 
-    session.remove("discord_id");
+    session.remove("provider_name");
+    session.remove("external_id");
 
     info!("New user created");
 
@@ -401,7 +483,7 @@ async fn post_user(
 
 // This type is specified because the oauth2 crate uses type states (it encodes
 // the state within the type). Perhaps there is a more convenient way to do this?
-pub type DiscordClient<
+pub type OAuthClient<
     HasAuthUrl = EndpointSet,
     HasDeviceAuthUrl = EndpointNotSet,
     HasIntrospectionUrl = EndpointNotSet,

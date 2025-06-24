@@ -15,6 +15,7 @@ pub struct Booking {
     pub end_time: DateTime<Utc>,
     pub telescope_name: String,
     pub user_name: String,
+    pub user_provider: String,
 }
 
 impl Booking {
@@ -41,6 +42,7 @@ impl Booking {
             end_time: end,
             telescope_name: telescope_id,
             user_name: user.name,
+            user_provider: user.provider,
         })
     }
 
@@ -50,7 +52,7 @@ impl Booking {
         let conn = connection.lock().await;
         let mut stmt = conn
             .prepare(
-                "select start_timestamp, end_timestamp, telescope_id, username
+                "select start_timestamp, end_timestamp, telescope_id, username, provider
                         from booking, user
                         where booking.user_id = user.id",
             )
@@ -62,6 +64,7 @@ impl Booking {
                     end_time: DateTime::<Utc>::from_timestamp(row.get(1)?, 0).unwrap(),
                     telescope_name: row.get(2)?,
                     user_name: row.get(3)?,
+                    user_provider: row.get(4)?,
                 })
             })
             .map_err(|err| InternalError::new(format!("Failed to query_map: {err}")))?;

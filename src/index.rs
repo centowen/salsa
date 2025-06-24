@@ -27,7 +27,11 @@ pub async fn get_index(Extension(user): Extension<Option<User>>) -> Response {
 pub fn render_main(user: Option<User>, content: String) -> String {
     IndexTemplate {
         name: match user {
-            Some(User { id: _, name }) => name,
+            Some(User {
+                id: _,
+                name,
+                provider,
+            }) => format!("{} ({})", name, provider),
             None => String::new(),
         },
         content,
