@@ -10,9 +10,7 @@ use tower_http::trace::TraceLayer;
 
 use crate::authentication;
 use crate::bookings;
-use crate::database::{
-    DataBase, FileStorage, create_database_from_directory, create_sqlite_database_on_disk,
-};
+use crate::database::create_sqlite_database_on_disk;
 use crate::index;
 use crate::observe_routes;
 use crate::telescope::{TelescopeCollectionHandle, create_telescope_collection};
@@ -22,17 +20,12 @@ use crate::telescope_routes;
 // The underlying state itself should be shared.
 #[derive(Clone)]
 pub struct AppState {
-    pub database: DataBase<FileStorage>,
     pub database_connection: Arc<Mutex<Connection>>,
     pub store: MemoryStore,
     pub telescopes: TelescopeCollectionHandle,
 }
 
 pub async fn create_app() -> Router {
-    let database = create_database_from_directory("database.json")
-        .await
-        .expect("failed to create database");
-
     let database_connection = Arc::new(Mutex::new(
         create_sqlite_database_on_disk("database.sqlite3")
             .expect("failed to create sqlite database"),
@@ -40,12 +33,9 @@ pub async fn create_app() -> Router {
 
     let store = MemoryStore::new();
 
-    let telescopes = create_telescope_collection(&database)
-        .await
-        .expect("failed to create telescopes");
+    let telescopes = create_telescope_collection("telescopes.toml");
 
     let state = AppState {
-        database,
         database_connection,
         store,
         telescopes,
