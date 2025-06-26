@@ -1,0 +1,5 @@
+<div class="section light">
+  {% for provider in provider_names %}
+    <div><a href="/auth/redirect/{{ provider }}">{{ provider }}</a></div>
+  {% endfor %}
+</div>

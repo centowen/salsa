@@ -40,7 +40,7 @@ async fn get_bookings(
     let my_bookings = match user {
         Some(ref user) => bookings
             .iter()
-            .filter(|b| b.user_name == user.name)
+            .filter(|b| b.user_name == user.name && b.user_provider == user.provider)
             .cloned()
             .map(|b| MyBooking {
                 inner: b.clone(),
@@ -92,6 +92,7 @@ async fn create_booking(
         start_time,
         end_time,
         user_name: user.name.clone(),
+        user_provider: user.provider.clone(),
         telescope_name: booking_form.telescope,
     };
     // TODO: Do the overlap check in the database instead.
