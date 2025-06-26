@@ -15,12 +15,8 @@ use axum::{
 };
 use log::{debug, info, trace, warn};
 use oauth2::{
-    AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken, EndpointNotSet, EndpointSet,
-    RedirectUrl, Scope, StandardRevocableToken, TokenResponse, TokenUrl,
-    basic::{
-        BasicClient, BasicErrorResponse, BasicRevocationErrorResponse,
-        BasicTokenIntrospectionResponse, BasicTokenResponse,
-    },
+    AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken, RedirectUrl, Scope,
+    TokenResponse, TokenUrl, basic::BasicClient,
 };
 use reqwest::header::USER_AGENT;
 use rusqlite::Result;
@@ -109,28 +105,6 @@ fn read_auth_provider(provider_name: &str) -> Result<Provider, InternalError> {
     Ok(auth_provider.clone())
 }
 
-fn create_oauth2_client_specific_provider(
-    provider_name: &str,
-) -> Result<OAuthClient, InternalError> {
-    // TODO: Don't read the secrets from disk all the time probably...
-    let auth_provider = read_auth_provider(provider_name)?;
-    let client = BasicClient::new(ClientId::new(auth_provider.client_id.clone()))
-        .set_client_secret(ClientSecret::new(auth_provider.client_secret.clone()))
-        .set_auth_uri(
-            AuthUrl::new(auth_provider.auth_uri.clone()).expect("Hardcoded URL should always work"),
-        )
-        // TODO: This url should be retrieved from where we are deployed.
-        .set_redirect_uri(
-            RedirectUrl::new(auth_provider.redirect_uri.clone())
-                .expect("Hardcoded URL should always work."),
-        )
-        .set_token_uri(
-            TokenUrl::new(auth_provider.token_uri.clone())
-                .expect("Hardcoded URL should always work."),
-        );
-    Ok(client)
-}
-
 // Basic Oath2 flow
 //
 // 1. User is prompted to select oauth2 provider.
@@ -162,7 +136,18 @@ async fn redirect_to_auth_provider(
     State(state): State<AppState>,
 ) -> Result<impl IntoResponse, InternalError> {
     // To know that we're the originator of the request when the user comes back from OAuth2 provider
-    let (url, token) = create_oauth2_client_specific_provider(&provider)?
+
+    let auth_provider = read_auth_provider(&provider)?;
+    let client = BasicClient::new(ClientId::new(auth_provider.client_id.clone()))
+        .set_auth_uri(
+            AuthUrl::new(auth_provider.auth_uri.clone()).expect("Hardcoded URL should always work"),
+        )
+        // TODO: This url should be retrieved from where we are deployed.
+        .set_redirect_uri(
+            RedirectUrl::new(auth_provider.redirect_uri.clone())
+                .expect("Hardcoded URL should always work."),
+        );
+    let (url, token) = client
         .authorize_url(CsrfToken::new_random)
         .add_scope(Scope::new("identify".to_string()))
         .add_extra_param("prompt".to_string(), "none".to_string())
@@ -258,7 +243,19 @@ async fn authenticate_from_oauth2(
         .redirect(reqwest::redirect::Policy::none())
         .build()
         .expect("Hardcoded client should always build.");
-    let token = match create_oauth2_client_specific_provider(&provider_name)?
+
+    let provider = read_auth_provider(&provider_name)?;
+    let client = BasicClient::new(ClientId::new(provider.client_id.clone()))
+        .set_client_secret(ClientSecret::new(provider.client_secret.clone()))
+        // TODO: This url should be retrieved from where we are deployed.
+        .set_redirect_uri(
+            RedirectUrl::new(provider.redirect_uri.clone())
+                .expect("Hardcoded URL should always work."),
+        )
+        .set_token_uri(
+            TokenUrl::new(provider.token_uri.clone()).expect("Hardcoded URL should always work."),
+        );
+    let token = match client
         .exchange_code(AuthorizationCode::new(query.code.clone()))
         .request_async(&http_client)
         .await
@@ -274,7 +271,6 @@ async fn authenticate_from_oauth2(
 
     debug!("Code authenticated");
 
-    let provider = read_auth_provider(&provider_name)?;
     // 5. We use the token to get the identity of the user from oauth2 provider.
     let user_data: Map<String, Value> = http_client
         .get(&provider.user_uri)
@@ -480,24 +476,3 @@ async fn post_user(
     // Always redraw everything to update log in state.
     Ok(Html(render_main(Some(user), content)).into_response())
 }
-
-// This type is specified because the oauth2 crate uses type states (it encodes
-// the state within the type). Perhaps there is a more convenient way to do this?
-pub type OAuthClient<
-    HasAuthUrl = EndpointSet,
-    HasDeviceAuthUrl = EndpointNotSet,
-    HasIntrospectionUrl = EndpointNotSet,
-    HasRevocationUrl = EndpointNotSet,
-    HasTokenUrl = EndpointSet,
-> = oauth2::Client<
-    BasicErrorResponse,
-    BasicTokenResponse,
-    BasicTokenIntrospectionResponse,
-    StandardRevocableToken,
-    BasicRevocationErrorResponse,
-    HasAuthUrl,
-    HasDeviceAuthUrl,
-    HasIntrospectionUrl,
-    HasRevocationUrl,
-    HasTokenUrl,
->;
