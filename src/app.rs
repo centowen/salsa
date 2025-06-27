@@ -1,4 +1,3 @@
-use async_session::MemoryStore;
 use axum::middleware;
 use axum::{Router, routing::get};
 use rusqlite::Connection;
@@ -17,7 +16,6 @@ use crate::routes::authentication::extract_session;
 #[derive(Clone)]
 pub struct AppState {
     pub database_connection: Arc<Mutex<Connection>>,
-    pub store: MemoryStore,
     pub telescopes: TelescopeCollectionHandle,
 }
 
@@ -27,13 +25,10 @@ pub async fn create_app() -> Router {
             .expect("failed to create sqlite database"),
     ));
 
-    let store = MemoryStore::new();
-
     let telescopes = create_telescope_collection("telescopes.toml");
 
     let state = AppState {
         database_connection,
-        store,
         telescopes,
     };
 

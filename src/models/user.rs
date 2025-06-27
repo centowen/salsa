@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use log::trace;
 use rusqlite::{Connection, Error};
 use tokio::sync::Mutex;
 
@@ -14,35 +13,6 @@ pub struct User {
 }
 
 impl User {
-    pub async fn fetch(
-        connection: Arc<Mutex<Connection>>,
-        id: i64,
-    ) -> Result<Option<User>, InternalError> {
-        let conn = connection.lock().await;
-        match conn.query_row("select * from user where id = (?1)", ((id),), |row| {
-            Ok((
-                row.get::<usize, i64>(0)
-                    .expect("Table 'user' has known layout"),
-                row.get::<usize, String>(1)
-                    .expect("Table 'user' has known layout"),
-                row.get::<usize, String>(2)
-                    .expect("Table 'user' has known layout"),
-            ))
-        }) {
-            Ok((id, name, provider)) => Ok(Some(User { id, name, provider })),
-            Err(Error::QueryReturnedNoRows) => {
-                trace!("Fetch user query returned no rows");
-                Ok(None)
-            }
-            Err(err) => {
-                trace!("Error running fetch user query");
-                Err(InternalError::new(format!(
-                    "Failed to fetch user from db: {err}"
-                )))
-            }
-        }
-    }
-
     pub async fn create_from_external(
         connection: Arc<Mutex<Connection>>,
         name: String,
