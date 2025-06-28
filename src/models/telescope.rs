@@ -90,6 +90,11 @@ impl TelescopeCollectionHandle {
         telescopes_read_lock.get(id).cloned()
     }
 
+    pub async fn contains_key(&self, id: &str) -> bool {
+        let telescopes_read_lock = self.telescopes.read().await;
+        telescopes_read_lock.contains_key(id)
+    }
+
     pub fn get_names(&self) -> Vec<String> {
         self.names.clone()
     }

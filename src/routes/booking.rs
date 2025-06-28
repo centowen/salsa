@@ -88,6 +88,9 @@ async fn create_booking(
     let start_time: DateTime<Utc> = Utc.from_utc_datetime(&naive_datetime);
     let end_time = start_time + Duration::hours(booking_form.duration);
 
+    if !state.telescopes.contains_key(&booking_form.telescope).await {
+        return Ok(StatusCode::BAD_REQUEST.into_response());
+    }
     let booking = Booking {
         start_time,
         end_time,
