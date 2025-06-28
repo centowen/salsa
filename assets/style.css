@@ -1,4 +1,4 @@
-* {
+header * {
     margin: 0;
     padding: 0;
     box-sizing: border-box;
@@ -16,15 +16,29 @@
     --main-bg-color: var(--gray100);
 }
 
-html {
-    height: 100%;
-}
 body {
     font-family: 'Roboto flex', sans-serif;
     font-size: 16px;
     background-color: var(--gray900);
     height: 100%;
+    margin: 0;
 }
+
+h1 {
+    font-size: 140%;
+    margin-top: 0;
+}
+
+h2 {
+    font-size: 130%;
+    margin-top: 0;
+}
+
+h3 {
+    font-size: 120%;
+    margin-top: 0;
+}
+
 #page {
     height: 100%;
     display: flex;
@@ -39,9 +53,7 @@ body {
 /* Desktop styles */
 @media only screen and (min-width: 961px) {
     #page {
-        width: 960px;
         margin: 0 auto;
-        /* box-shadow: 0 0 6px var(--gray300); */
     }
 }
 
@@ -55,6 +67,7 @@ body {
 }
 .section.dark {
     color: var(--secondary-color);
+    background-color: var(--gray900);
 }
 .section a {
     color: var(--main-link-color);
@@ -77,6 +90,7 @@ body {
     font-size: 140%;
     width: 50%;
     margin: auto;
+    margin-bottom: 50px;
 }
 
 header {
@@ -97,6 +111,7 @@ header {
     align-items:center;
     justify-content:center;
 }
+
 #logo a {
     color: inherit;
     text-decoration: none;
@@ -121,7 +136,7 @@ nav menu li:hover {
     background-color: var(--primary-color-light);
 }
 
-nav menu li a {
+nav menu li * {
     padding: 0px 20px;
     color: inherit;
     font-size: 16px;
@@ -176,6 +191,13 @@ footer {
     display: block;
 }
 
+.bookings {
+    margin-bottom: 20px;
+}
+
+.bookings > div {
+    margin: .3em;
+}
 
 .new-booking #new-booking-cols {
     display: flex;
