@@ -1,8 +1,11 @@
 use crate::coords::Direction;
-use crate::telescopes::{
+use crate::models::telescope_types::{
     ReceiverConfiguration, ReceiverError, TelescopeDefinition, TelescopeError, TelescopeInfo,
     TelescopeTarget, TelescopeType, TelescopesConfig,
 };
+
+use crate::models::fake_telescope;
+use crate::models::salsa_telescope;
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::fs;
@@ -109,7 +112,7 @@ fn start_telescope_service(telescope: Arc<Mutex<dyn Telescope>>) -> tokio::task:
 fn create_telescope(def: TelescopeDefinition) -> TelescopeHandle {
     log::info!("Creating telescope {}", def.name);
     let telescope: Arc<Mutex<dyn Telescope>> = match def.telescope_type {
-        TelescopeType::Salsa => Arc::new(Mutex::new(crate::salsa_telescope::create(
+        TelescopeType::Salsa => Arc::new(Mutex::new(salsa_telescope::create(
             def.name.clone(),
             def.controller_address
                 .expect("Telescope of type Salsa should have controller_address.")
@@ -118,9 +121,7 @@ fn create_telescope(def: TelescopeDefinition) -> TelescopeHandle {
                 .expect("Telescope of type Salsa should have receiver_address.")
                 .clone(),
         ))),
-        TelescopeType::Fake => {
-            Arc::new(Mutex::new(crate::fake_telescope::create(def.name.clone())))
-        }
+        TelescopeType::Fake => Arc::new(Mutex::new(fake_telescope::create(def.name.clone()))),
     };
 
     // TODO: The join handle is dropped here (and the service isn't really able to be stopped

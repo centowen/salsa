@@ -1,5 +1,5 @@
 use crate::coords::Direction;
-use crate::telescopes::TelescopeError;
+use crate::models::telescope_types::TelescopeError;
 use hex_literal::hex;
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpStream};

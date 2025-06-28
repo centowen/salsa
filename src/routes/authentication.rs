@@ -23,8 +23,8 @@ use rusqlite::Result;
 use serde::Deserialize;
 use serde_json::{Map, Value};
 
-use crate::index::render_main;
-use crate::user::User;
+use crate::models::user::User;
+use crate::routes::index::render_main;
 use crate::{app::AppState, error::InternalError};
 
 const SESSION_COOKIE_NAME: &str = "session";

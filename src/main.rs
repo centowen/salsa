@@ -3,22 +3,14 @@ use clap::Parser;
 use std::net::SocketAddr;
 
 mod app;
-mod authentication;
-mod bookings;
 mod coords;
 mod database;
 mod error;
-mod fake_telescope;
-mod index;
-mod observe_routes;
-mod salsa_telescope;
-mod telescope;
+mod models;
+mod routes;
 mod telescope_controller;
-mod telescope_routes;
 mod telescope_tracker;
-mod telescopes;
 mod template;
-mod user;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
