@@ -1,5 +1,4 @@
 use async_session::MemoryStore;
-use authentication::extract_session;
 use axum::middleware;
 use axum::{Router, routing::get};
 use rusqlite::Connection;
@@ -8,13 +7,10 @@ use tokio::sync::Mutex;
 use tower_http::services::ServeDir;
 use tower_http::trace::TraceLayer;
 
-use crate::authentication;
-use crate::bookings;
 use crate::database::create_sqlite_database_on_disk;
-use crate::index;
-use crate::observe_routes;
-use crate::telescope::{TelescopeCollectionHandle, create_telescope_collection};
-use crate::telescope_routes;
+use crate::models::telescope::{TelescopeCollectionHandle, create_telescope_collection};
+use crate::routes;
+use crate::routes::authentication::extract_session;
 
 // Anything that goes in here must be a handle or pointer that can be cloned.
 // The underlying state itself should be shared.
@@ -42,11 +38,11 @@ pub async fn create_app() -> Router {
     };
 
     let mut app = Router::new()
-        .route("/", get(index::get_index))
-        .nest("/auth", authentication::routes(state.clone()))
-        .nest("/observe", observe_routes::routes(state.clone()))
-        .nest("/bookings", bookings::routes::routes(state.clone()))
-        .nest("/telescope", telescope_routes::routes(state.clone()))
+        .route("/", get(routes::index::get_index))
+        .nest("/auth", routes::authentication::routes(state.clone()))
+        .nest("/observe", routes::observe::routes(state.clone()))
+        .nest("/bookings", routes::booking::routes(state.clone()))
+        .nest("/telescope", routes::telescope::routes(state.clone()))
         .layer(TraceLayer::new_for_http())
         .route_layer(middleware::from_fn_with_state(
             state.clone(),

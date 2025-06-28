@@ -1,7 +1,7 @@
 use crate::coords::{Direction, Location};
 use crate::coords::{horizontal_from_equatorial, horizontal_from_galactic};
-use crate::telescope::Telescope;
-use crate::telescopes::{
+use crate::models::telescope::Telescope;
+use crate::models::telescope_types::{
     ObservedSpectra, ReceiverConfiguration, ReceiverError, TelescopeError, TelescopeInfo,
     TelescopeStatus, TelescopeTarget,
 };

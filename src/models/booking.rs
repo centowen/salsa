@@ -5,9 +5,8 @@ use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 
-use crate::{error::InternalError, user::User};
-
-pub mod routes;
+use crate::error::InternalError;
+use crate::models::user::User;
 
 #[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
 pub struct Booking {

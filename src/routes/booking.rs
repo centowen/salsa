@@ -1,8 +1,8 @@
 use crate::app::AppState;
-use crate::bookings::Booking;
 use crate::error::InternalError;
-use crate::index::render_main;
-use crate::user::User;
+use crate::models::booking::Booking;
+use crate::models::user::User;
+use crate::routes::index::render_main;
 use askama::Template;
 use axum::http::HeaderMap;
 use axum::response::{Html, IntoResponse, Response};

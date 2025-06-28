@@ -1,8 +1,8 @@
 use crate::app::AppState;
 use crate::coords::Direction;
-use crate::telescope::TelescopeHandle;
-use crate::telescopes::TelescopeStatus;
-use crate::telescopes::{TelescopeError, TelescopeInfo};
+use crate::models::telescope::TelescopeHandle;
+use crate::models::telescope_types::TelescopeStatus;
+use crate::models::telescope_types::{TelescopeError, TelescopeInfo};
 use askama::Template;
 use axum::extract::ws::Message;
 use axum::{

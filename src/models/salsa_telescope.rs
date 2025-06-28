@@ -1,10 +1,10 @@
 use crate::coords::Direction;
-use crate::telescope::Telescope;
-use crate::telescope_tracker::TelescopeTracker;
-use crate::telescopes::{
+use crate::models::telescope::Telescope;
+use crate::models::telescope_types::{
     Measurement, ObservedSpectra, ReceiverConfiguration, ReceiverError, TelescopeError,
     TelescopeInfo, TelescopeTarget,
 };
+use crate::telescope_tracker::TelescopeTracker;
 use async_trait::async_trait;
 use chrono::Utc;
 use std::iter::zip;

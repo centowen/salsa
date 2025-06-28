@@ -1,13 +1,14 @@
 use crate::app::AppState;
-use crate::bookings::Booking;
 use crate::error::InternalError;
-use crate::index::render_main;
-use crate::telescope::TelescopeHandle;
-use crate::telescope_routes::telescope_state;
-use crate::telescopes::{
+use crate::models::booking::Booking;
+use crate::models::telescope::TelescopeHandle;
+use crate::models::telescope_types::{
     ReceiverConfiguration, ReceiverError, TelescopeError, TelescopeInfo, TelescopeTarget,
 };
-use crate::user::User;
+use crate::models::user::User;
+use crate::routes::index::render_main;
+use crate::routes::telescope::telescope_state;
+
 use askama::Template;
 use axum::body::Body;
 use axum::extract::{Path, State};

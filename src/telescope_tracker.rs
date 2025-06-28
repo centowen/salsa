@@ -1,7 +1,7 @@
 use crate::coords::{Direction, Location};
 use crate::coords::{horizontal_from_equatorial, horizontal_from_galactic};
+use crate::models::telescope_types::{TelescopeError, TelescopeStatus, TelescopeTarget};
 use crate::telescope_controller::{TelescopeCommand, TelescopeController, TelescopeResponse};
-use crate::telescopes::{TelescopeError, TelescopeStatus, TelescopeTarget};
 use chrono::{DateTime, Utc};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
