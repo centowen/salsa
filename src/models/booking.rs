@@ -19,7 +19,7 @@ pub struct Booking {
 
 impl Booking {
     pub fn overlaps(&self, other: &Booking) -> bool {
-        self.end_time >= other.start_time && self.start_time <= other.end_time
+        self.start_time < other.end_time && self.end_time > other.start_time
     }
 
     pub async fn create(
@@ -85,4 +85,43 @@ impl Booking {
 pub enum AddBookingError {
     ServiceUnavailable,
     Conflict,
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    fn create_booking(start_time_ts: i64, end_time_ts: i64) -> Booking {
+        Booking {
+            start_time: DateTime::from_timestamp(start_time_ts, 0).unwrap(),
+            end_time: DateTime::from_timestamp(end_time_ts, 0).unwrap(),
+            telescope_name: String::new(),
+            user_name: String::new(),
+            user_provider: String::new(),
+        }
+    }
+
+    #[test]
+    fn booking_overlap() {
+        let booking1 = create_booking(1, 3);
+        let booking2 = create_booking(2, 4);
+        assert!(booking1.overlaps(&booking2));
+        assert!(booking2.overlaps(&booking1));
+    }
+
+    #[test]
+    fn booking_no_overlap() {
+        let booking1 = create_booking(1, 2);
+        let booking2 = create_booking(3, 4);
+        assert!(!booking1.overlaps(&booking2));
+        assert!(!booking2.overlaps(&booking1));
+    }
+
+    #[test]
+    fn booking_no_overlap_adjacent() {
+        let booking1 = create_booking(1, 2);
+        let booking2 = create_booking(2, 3);
+        assert!(!booking1.overlaps(&booking2));
+        assert!(!booking2.overlaps(&booking1));
+    }
 }
