@@ -1,19 +1,18 @@
-use std::{collections::HashMap, fmt::Display, fs::read_to_string};
+use std::{collections::HashMap, fs::read_to_string};
 
 use askama::Template;
-use async_session::{MemoryStore, Session, SessionStore};
 use axum::{
-    Form, Router,
+    Router,
     extract::{Path, Query, Request, State},
     http::{
-        HeaderMap, StatusCode,
+        HeaderMap, HeaderValue, StatusCode,
         header::{COOKIE, SET_COOKIE},
     },
     middleware::Next,
     response::{Html, IntoResponse, Redirect, Response},
-    routing::{get, post},
+    routing::get,
 };
-use log::{debug, info, trace, warn};
+use log::{debug, info, warn};
 use oauth2::{
     AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken, RedirectUrl, Scope,
     TokenResponse, TokenUrl, basic::BasicClient,
@@ -23,11 +22,32 @@ use rusqlite::Result;
 use serde::Deserialize;
 use serde_json::{Map, Value};
 
+use crate::models::session::{Session, complete_oauth2_login, start_oauth2_login};
 use crate::models::user::User;
 use crate::routes::index::render_main;
 use crate::{app::AppState, error::InternalError};
 
 const SESSION_COOKIE_NAME: &str = "session";
+
+fn get_session_token(headers: &HeaderMap<HeaderValue>) -> Option<&str> {
+    let Ok(cookies) = headers.get(COOKIE)?.to_str() else {
+        warn!("Could not parse cookie header as string");
+        return None;
+    };
+    cookies
+        .split(";")
+        .map(|kv_string| {
+            let mut kv = kv_string.splitn(2, "=");
+            Some((
+                kv.next().expect("cookie should have key"),
+                kv.next().expect("cookie should have value"),
+            ))
+        })
+        .find_map(|kv| match kv {
+            Some((SESSION_COOKIE_NAME, value)) => Some(value),
+            _ => None,
+        })
+}
 
 pub async fn extract_session(
     State(state): State<AppState>,
@@ -35,36 +55,26 @@ pub async fn extract_session(
     next: Next,
 ) -> Result<Response, StatusCode> {
     debug!("Authenticating user session");
-    let session = get_user_session(request.headers(), &state.store).await;
-    trace!("Session get: {}", session.is_some());
-    let user = match session.and_then(|s| s.get::<i64>("user_id")) {
-        // TODO: InternalError -> Not logged in ... ok?
-        Some(user_id) => {
-            trace!("Got a user id from session");
-            User::fetch(state.database_connection, user_id)
-                .await
-                .unwrap_or(None)
-        }
-        None => {
-            trace!("No user id in session");
-            None
-        }
-    };
-    request.extensions_mut().insert(user.clone());
-    if user.is_some() {
+    if let Some(session_token) = get_session_token(request.headers()) {
+        let Ok(session) = Session::fetch(state.database_connection.clone(), session_token).await
+        else {
+            return Err(StatusCode::UNAUTHORIZED);
+        };
+        request.extensions_mut().insert(Some(session.user));
         debug!("User authenticated.");
     } else {
+        request.extensions_mut().insert::<Option<User>>(None);
         debug!("No user logged in.");
-    }
+    };
+
     Ok(next.run(request).await)
 }
 
 pub fn routes(state: AppState) -> Router {
     Router::new()
         .route("/authorized", get(authenticate_from_oauth2))
-        .route("/create_user", get(get_user))
-        .route("/create_user", post(post_user))
         .route("/login", get(login))
+        .route("/logout", get(logout))
         .route("/redirect/{provider_name}", get(redirect_to_auth_provider))
         .with_state(state)
 }
@@ -103,6 +113,26 @@ fn read_auth_provider(provider_name: &str) -> Result<Provider, InternalError> {
         )));
     };
     Ok(auth_provider.clone())
+}
+
+async fn logout(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<impl IntoResponse, InternalError> {
+    if let Some(session_token) = get_session_token(&headers) {
+        let session = Session::fetch(state.database_connection.clone(), session_token).await?;
+        session.delete(state.database_connection.clone()).await?;
+    }
+    let cookie = format!(
+        "{SESSION_COOKIE_NAME}=deleted; SameSite=Lax; HttpOnly; Secure; Path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT"
+    );
+
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        SET_COOKIE,
+        cookie.parse().expect("Cookie should be parseable always."),
+    );
+    Ok((headers, Redirect::to("/")).into_response())
 }
 
 // Basic Oath2 flow
@@ -153,25 +183,17 @@ async fn redirect_to_auth_provider(
         .add_extra_param("prompt".to_string(), "none".to_string())
         .url();
 
-    let mut session = Session::new();
-    session
-        .insert("csrf_token", &token)
-        .expect("Data created entirely by us");
-    session
-        .insert("provider", &provider)
-        .expect("Data created entirely by us");
-    let cookie = state
-        .store
-        .store_session(session)
-        .await
-        .expect("Storing into memory store should never fail.")
-        .expect("Should always get a cookie.");
-    let cookie = format!("{SESSION_COOKIE_NAME}={cookie}; SameSite=Lax; HttpOnly; Secure; Path=/");
+    start_oauth2_login(state.database_connection.clone(), &provider, &token).await?;
+    let cookie = format!(
+        "{}={}; SameSite=Lax; HttpOnly; Secure; Path=/",
+        SESSION_COOKIE_NAME,
+        token.secret()
+    );
 
     let mut headers = HeaderMap::new();
     headers.insert(
         SET_COOKIE,
-        cookie.parse().expect("Cookie should be parseable always."),
+        HeaderValue::from_str(&cookie).expect("cookie will always be valid"),
     );
 
     info!("Sending user to {provider} to authenticate");
@@ -186,57 +208,20 @@ struct AuthRequest {
     state: String,
 }
 
-struct CsrfError {}
-
-impl Display for CsrfError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("CSRF error occured")
-    }
-}
-
-fn validate_csrf_token(
-    session: &Session,
-    user_supplied_token: String,
-) -> std::result::Result<(), CsrfError> {
-    if let Some(session_token) = session.get::<String>("csrf_token") {
-        if session_token == user_supplied_token {
-            debug!("CSRF token ok");
-            Ok(())
-        } else {
-            debug!("CSRF token doesn't match");
-            Err(CsrfError {})
-        }
-    } else {
-        debug!("No CSRF token in session");
-        Err(CsrfError {})
-    }
-}
-
 // 3. User comes back with an authorization code.
 async fn authenticate_from_oauth2(
     Query(query): Query<AuthRequest>,
-    headers: HeaderMap,
     State(state): State<AppState>,
 ) -> Result<Response, InternalError> {
     debug!("Coming back from OAuth2 provider");
-    let session = match get_user_session(&headers, &state.store).await {
-        Some(session) => session,
-        None => {
-            debug!("No session found");
-            return Ok(StatusCode::UNAUTHORIZED.into_response());
-        }
-    };
-    if let Err(err) = validate_csrf_token(&session, query.state) {
-        debug!("Failed to validate CSRF token from oauth2 provider: {err}");
-        // This realistically happens because of an old or bogus request
-        // to this endpoint. Returning 401 is reasonable.
-        return Ok(StatusCode::UNAUTHORIZED.into_response());
-    }
-
-    let Some(provider_name) = session.get::<String>("provider") else {
-        warn!("No provider set in the session, unabled to use code");
-        return Ok(StatusCode::UNAUTHORIZED.into_response());
-    };
+    let provider_name =
+        match complete_oauth2_login(state.database_connection.clone(), &query.state).await {
+            Ok(provider) => provider,
+            Err(err) => {
+                debug!("Failed to validate CSRF token from oauth2 provider: {err:?}");
+                return Ok(StatusCode::UNAUTHORIZED.into_response());
+            }
+        };
 
     // 4. We use that code to request an authorization token from oauth2 provider.
     let http_client = reqwest::ClientBuilder::new()
@@ -306,29 +291,37 @@ async fn authenticate_from_oauth2(
         }
     };
 
-    let user = User::fetch_with_user_with_external_id(
-        state.database_connection,
+    let user = match User::fetch_with_user_with_external_id(
+        state.database_connection.clone(),
         provider_name.clone(),
         &user_id,
     )
-    .await?;
+    .await?
+    {
+        Some(user) => user,
+        None => {
+            debug!("Create new user");
+            let Some(Some(username)) = user_data
+                .get(&provider.display_name_field)
+                .map(|username| username.as_str())
+            else {
+                return Err(InternalError::new(format!(
+                    "No {} field in user object returned from {}",
+                    &provider.display_name_field, &provider.user_uri
+                )));
+            };
+            User::create_from_external(
+                state.database_connection.clone(),
+                username.to_string(),
+                provider_name.to_string(),
+                &user_id,
+            )
+            .await?
+        }
+    };
 
-    let cookie = state
-        .store
-        .store_session(Session::new())
-        .await
-        .expect("Storing into memory store should never fail.")
-        .expect("Should always get a cookie.");
-
-    // Need to fetch the session out of the store again. It's not possible to
-    // just create outside and store a clone, it will lose its cookie state.
-    let mut session = state
-        .store
-        .load_session(cookie.clone())
-        .await
-        .expect("We just put this session in.")
-        .expect("really!");
-
+    let session = Session::create(state.database_connection.clone(), &user).await?;
+    let cookie = session.token;
     // Note: We reuse the same session cookie name here. So we don't need to
     // reset that cookie.
     let cookie = format!("{SESSION_COOKIE_NAME}={cookie}; SameSite=Lax; HttpOnly; Secure; Path=/");
@@ -338,141 +331,5 @@ async fn authenticate_from_oauth2(
         SET_COOKIE,
         cookie.parse().expect("Cookie should be parseable always."),
     );
-
-    match user {
-        Some(User { id, .. }) => {
-            info!("Logging in existing user");
-            session.insert("user_id", id).expect("Memory store yo!");
-            Ok((headers, Redirect::to("/")).into_response())
-        }
-        None => {
-            debug!("Redirecting to create new user");
-            let Some(username) = user_data
-                .get(&provider.display_name_field)
-                .map(|username| username.as_str())
-            else {
-                return Err(InternalError::new(format!(
-                    "No {} field in user object returned from {}",
-                    &provider.display_name_field, &provider.user_uri
-                )));
-            };
-            session
-                .insert("external_id", user_id)
-                .expect("MemoryStore should work every time");
-            session
-                .insert("provider_name", provider_name)
-                .expect("MemoryStore should work every time");
-            session
-                .insert("user_display_name", username)
-                .expect("MemoryStore should work every time");
-            Ok((headers, Redirect::to("create_user")).into_response())
-        }
-    }
-}
-
-#[derive(Template)]
-#[template(path = "create_user.html")]
-struct DisplayUser {
-    username: String,
-}
-
-async fn get_user_session(headers: &HeaderMap, store: &MemoryStore) -> Option<Session> {
-    let cookie = match headers.get(COOKIE)?.to_str() {
-        Ok(cookie) => cookie,
-        Err(_) => return None,
-    };
-    // parse coookie
-    let kv_pairs = cookie.split(";");
-    let session_id = kv_pairs
-        .map(|kv_string| {
-            let mut kv = kv_string.splitn(2, "=");
-            Some((kv.next()?, kv.next()?))
-        })
-        .find_map(|kv| match kv {
-            Some((SESSION_COOKIE_NAME, value)) => Some(value),
-            _ => None,
-        })?;
-
-    // TODO(#153): Clear the cookie here on failure to get the session.
-    store
-        .load_session(session_id.to_string())
-        .await
-        .unwrap_or(None)
-}
-
-async fn get_user(
-    headers: HeaderMap,
-    State(state): State<AppState>,
-) -> Result<Response, InternalError> {
-    let session = match get_user_session(&headers, &state.store).await {
-        Some(session) => session,
-        None => return Ok(StatusCode::UNAUTHORIZED.into_response()),
-    };
-    let content = DisplayUser {
-        username: session.get("user_display_name").ok_or_else(|| {
-            InternalError::new("Failed to get user_display_name from session".to_string())
-        })?,
-    }
-    .render()
-    .expect("Template rendering should always succeed");
-    let content = if headers.get("hx-request").is_some() {
-        content
-    } else {
-        render_main(None, content)
-    };
-    Ok(Html(content).into_response())
-}
-
-#[derive(Deserialize, Debug)]
-struct UserForm {
-    username: String,
-}
-
-#[derive(Template)]
-#[template(path = "welcome_user.html")]
-struct WelcomeUser {
-    username: String,
-}
-async fn post_user(
-    headers: HeaderMap,
-    State(state): State<AppState>,
-    Form(user_form): Form<UserForm>,
-) -> Result<Response, InternalError> {
-    let mut session = match get_user_session(&headers, &state.store).await {
-        Some(session) => session,
-        None => return Ok(StatusCode::UNAUTHORIZED.into_response()),
-    };
-    let provider_name: String = session
-        .get("provider_name")
-        .ok_or_else(|| InternalError::new("No provider_name in session".to_string()))?;
-    let external_id: String = session
-        .get("external_id")
-        .ok_or_else(|| InternalError::new("No external_id in session".to_string()))?;
-
-    let username = user_form.username;
-
-    let user = User::create_from_external(
-        state.database_connection,
-        username.clone(),
-        provider_name.clone(),
-        &external_id,
-    )
-    .await?;
-
-    session.remove("provider_name");
-    session.remove("external_id");
-
-    info!("New user created");
-
-    session
-        .insert("user_id", user.id)
-        .expect("Session is stored in memory");
-
-    let content = WelcomeUser {
-        username: username.clone(),
-    }
-    .render()
-    .expect("Template rendering should always succeed");
-    // Always redraw everything to update log in state.
-    Ok(Html(render_main(Some(user), content)).into_response())
+    Ok((headers, Redirect::to("/")).into_response())
 }
